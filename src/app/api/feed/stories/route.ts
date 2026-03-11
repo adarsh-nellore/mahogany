@@ -1,0 +1,138 @@
+import { NextRequest, NextResponse } from "next/server";
+import { query } from "@/lib/db";
+import { FeedStory, Profile } from "@/lib/types";
+import { getSessionProfileId } from "@/lib/session";
+import { zipValidSourceLinks } from "@/lib/sourceUrl";
+
+export async function GET(request: NextRequest) {
+  const sp = request.nextUrl.searchParams;
+
+  const domains = sp.get("domains")?.split(",").filter(Boolean) || [];
+  const regions = sp.get("regions")?.split(",").filter(Boolean) || [];
+  const severity = sp.get("severity");
+  const search = sp.get("search");
+  const therapeutic = sp.get("therapeutic_areas")?.split(",").filter(Boolean) || [];
+  const globalOnly = sp.get("global") === "true";
+  const page = Math.max(1, parseInt(sp.get("page") || "1", 10));
+  const perPage = Math.min(120, Math.max(1, parseInt(sp.get("per_page") || "40", 10)));
+  const offset = (page - 1) * perPage;
+
+  // Also accept legacy single-value params
+  const legacyDomain = sp.get("domain");
+  const legacyRegion = sp.get("region");
+  if (legacyDomain && domains.length === 0) domains.push(legacyDomain);
+  if (legacyRegion && regions.length === 0) regions.push(legacyRegion);
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  let paramIdx = 0;
+
+  if (globalOnly) {
+    conditions.push(`is_global = true`);
+  } else {
+    const profileId = await getSessionProfileId();
+    if (profileId) {
+      const profileRows = await query<Profile>(
+        `SELECT id FROM profiles WHERE id = $1`,
+        [profileId]
+      );
+      if (profileRows.length > 0) {
+        paramIdx++;
+        conditions.push(`(profile_id = $${paramIdx} OR is_global = true)`);
+        params.push(profileId);
+      }
+    } else {
+      conditions.push(`is_global = true`);
+    }
+  }
+
+  if (domains.length > 0) {
+    paramIdx++;
+    // Only show stories that match at least one of the requested domains, or are untagged (general).
+    // This excludes e.g. pharma-only stories when the profile is Devices-only.
+    conditions.push(`(cardinality(domains) = 0 OR domains && $${paramIdx})`);
+    params.push(domains);
+  }
+
+  if (regions.length > 0) {
+    paramIdx++;
+    // Stories with no region tags are global content — always include them
+    conditions.push(`(cardinality(regions) = 0 OR regions && $${paramIdx})`);
+    params.push(regions);
+  }
+
+  if (severity) {
+    paramIdx++;
+    conditions.push(`severity = $${paramIdx}`);
+    params.push(severity);
+  }
+
+  if (therapeutic.length > 0) {
+    paramIdx++;
+    const taParam = paramIdx;
+    paramIdx++;
+    const taTextParam = paramIdx;
+    // Build a tsquery using OR between terms (replace spaces within terms, separate with |)
+    const taSearchTerms = therapeutic
+      .map((t) => t.replace(/\s+/g, " & "))
+      .join(" | ");
+    conditions.push(
+      // Stories with no TA tags are general regulatory content — always include them
+      `(cardinality(therapeutic_areas) = 0 OR therapeutic_areas && $${taParam} OR to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ to_tsquery('english', $${taTextParam}))`
+    );
+    params.push(therapeutic);
+    params.push(taSearchTerms);
+  }
+
+  if (search) {
+    paramIdx++;
+    conditions.push(
+      `to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ plainto_tsquery('english', $${paramIdx})`
+    );
+    params.push(search);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  try {
+    const countResult = await query<{ count: string }>(
+      `SELECT count(*)::text as count FROM feed_stories ${where}`,
+      params
+    );
+    const total = parseInt(countResult[0]?.count || "0", 10);
+
+    const rawStories = await query<FeedStory>(
+      `SELECT DISTINCT ON (
+         lower(regexp_replace(left(headline, 80), '[^a-zA-Z0-9]+', ' ', 'g'))
+       ) *
+       FROM feed_stories ${where}
+       ORDER BY
+         lower(regexp_replace(left(headline, 80), '[^a-zA-Z0-9]+', ' ', 'g')),
+         published_at DESC`,
+      params
+    );
+
+    rawStories.sort((a, b) => {
+      const sevOrder = { high: 1, medium: 2, low: 3 } as Record<string, number>;
+      const sa = sevOrder[a.severity] || 2;
+      const sb = sevOrder[b.severity] || 2;
+      if (sa !== sb) return sa - sb;
+      return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
+    });
+
+    const sliced = rawStories.slice(offset, offset + perPage);
+    const stories = sliced.map((s) => {
+      const valid = zipValidSourceLinks(s.source_urls, s.source_labels);
+      return { ...s, source_urls: valid.map((x) => x.url), source_labels: valid.map((x) => x.label) };
+    });
+    const dedupTotal = rawStories.length;
+
+    return NextResponse.json({ stories, total: dedupTotal, page, per_page: perPage });
+  } catch (err) {
+    console.error("[api/feed/stories] error:", err);
+    return NextResponse.json(
+      { error: "Failed to query stories", details: String(err) },
+      { status: 500 }
+    );
+  }
+}

@@ -1,0 +1,33 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionProfileId } from "@/lib/session";
+import { searchProfileEvidence } from "@/lib/profileSearchAgent";
+import { completeAgentRun, failAgentRun, logAgentAction, startAgentRun } from "@/lib/agentObservability";
+
+export async function POST(request: NextRequest) {
+  let runId: string | null = null;
+  try {
+    const body = (await request.json()) as { profile_id?: string; limit?: number };
+    const profileId = body.profile_id || (await getSessionProfileId());
+    if (!profileId) {
+      return NextResponse.json({ error: "profile_id is required" }, { status: 400 });
+    }
+
+    runId = await startAgentRun("ProfileSearchAgent", body as Record<string, unknown>, profileId);
+    const bundles = await searchProfileEvidence(profileId, body.limit ?? 40);
+    await logAgentAction(runId, "search_profile_evidence", { limit: body.limit ?? 40 }, { count: bundles.length });
+    await completeAgentRun(runId, { count: bundles.length });
+
+    return NextResponse.json({
+      profile_id: profileId,
+      bundles,
+    });
+  } catch (err) {
+    if (runId) await failAgentRun(runId, err);
+    console.error("[api/profile-search]", err);
+    return NextResponse.json(
+      { error: "Profile search failed", details: String(err) },
+      { status: 500 }
+    );
+  }
+}
+
