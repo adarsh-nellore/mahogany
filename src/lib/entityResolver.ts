@@ -60,10 +60,37 @@ function mentionTypeToEntityType(mentionType: ParsedMention["mention_type"]): En
   return "product";
 }
 
-async function upsertEntity(
+/** Metadata from product_search has regulatory fidelity we want to persist */
+const RICH_PRODUCT_KEYS = ["product_code", "advisory_committee", "device_class", "regulatory_id", "company", "source_api", "generic_name", "product_type", "domain", "region"];
+
+function hasRicherProductMetadata(metadata: Record<string, unknown>): boolean {
+  return RICH_PRODUCT_KEYS.some((k) => metadata[k] != null && metadata[k] !== "");
+}
+
+/**
+ * Merge metadata into an entity's metadata_json. Used when product_search
+ * provides richer data (product_code, advisory_committee, etc.) for an existing entity.
+ */
+export async function updateEntityMetadata(
+  entityId: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  const filtered = Object.fromEntries(
+    Object.entries(metadata).filter(([, v]) => v != null && v !== "")
+  );
+  if (Object.keys(filtered).length === 0) return;
+  await query(
+    `UPDATE entities SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || $2::jsonb, updated_at = now()
+     WHERE id = $1`,
+    [entityId, JSON.stringify(filtered)]
+  );
+}
+
+export async function upsertEntity(
   entityType: EntityType,
   rawText: string,
-  source: string
+  source: string,
+  metadata?: Record<string, unknown>
 ): Promise<{ entity_id: string; canonical_name: string; via: "exact" | "alias" | "created" | "fuzzy" }> {
   const normalized = normalizeToken(rawText);
   if (!normalized) {
@@ -82,6 +109,9 @@ async function upsertEntity(
     [entityType, normalized]
   );
   if (exact.length > 0) {
+    if (metadata && hasRicherProductMetadata(metadata)) {
+      await updateEntityMetadata(exact[0].id, { source, ...metadata });
+    }
     return { entity_id: exact[0].id, canonical_name: exact[0].canonical_name, via: "exact" };
   }
 
@@ -102,6 +132,9 @@ async function upsertEntity(
          ON CONFLICT (entity_id, normalized_alias) DO NOTHING`,
         [expandedMatch[0].id, rawText.trim(), normalized, source]
       ).catch(() => {});
+      if (metadata && hasRicherProductMetadata(metadata)) {
+        await updateEntityMetadata(expandedMatch[0].id, { source, ...metadata });
+      }
       return { entity_id: expandedMatch[0].id, canonical_name: expandedMatch[0].canonical_name, via: "alias" };
     }
   }
@@ -116,6 +149,9 @@ async function upsertEntity(
     [entityType, normalized]
   );
   if (alias.length > 0) {
+    if (metadata && hasRicherProductMetadata(metadata)) {
+      await updateEntityMetadata(alias[0].id, { source, ...metadata });
+    }
     return { entity_id: alias[0].id, canonical_name: alias[0].canonical_name, via: "alias" };
   }
 
@@ -140,6 +176,9 @@ async function upsertEntity(
            ON CONFLICT (entity_id, normalized_alias) DO NOTHING`,
           [candidate.id, rawText.trim(), normalized, source]
         ).catch(() => {});
+        if (metadata && hasRicherProductMetadata(metadata)) {
+          await updateEntityMetadata(candidate.id, { source, ...metadata });
+        }
         return { entity_id: candidate.id, canonical_name: candidate.canonical_name, via: "fuzzy" };
       }
     }
@@ -150,7 +189,7 @@ async function upsertEntity(
     `INSERT INTO entities (entity_type, canonical_name, normalized_name, metadata_json)
      VALUES ($1, $2, $3, $4)
      RETURNING id, canonical_name`,
-    [entityType, rawText.trim(), normalized, { source }]
+    [entityType, rawText.trim(), normalized, { source, ...metadata }]
   );
 
   await query(

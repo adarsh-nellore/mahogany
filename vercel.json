@@ -13,8 +13,16 @@
       "schedule": "30 */4 * * *"
     },
     {
+      "path": "/api/generate-feed-morning",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/send-digests",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/recover-sources",
+      "schedule": "30 2,14 * * *"
     }
   ]
 }

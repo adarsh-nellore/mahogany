@@ -106,7 +106,7 @@ const TOOLS: Tool[] = [
       properties: {
         stories: {
           type: "string",
-          description: "A JSON string representing an array of story objects. Each story: { headline, summary, body, severity, domains, regions, therapeutic_areas, impact_types, signal_indices, source_urls, source_labels }",
+          description: "A JSON string representing an array of story objects. Each story: { headline, summary, body, severity, domains, regions, therapeutic_areas, impact_types, signal_indices, source_urls, source_labels, relevance_reason }",
         },
       },
       required: ["stories"],
@@ -220,6 +220,7 @@ interface StoryOutput {
   signal_indices: number[];
   source_urls: string[];
   source_labels: string[];
+  relevance_reason?: string;
 }
 
 function derivePublishedAt(signalIndices: number[], signals: Signal[]): string {
@@ -269,9 +270,28 @@ function deduplicateSignals(signals: Signal[]): Signal[] {
   return deduped;
 }
 
+function getRoleFraming(role: string | undefined): string {
+  if (!role) return "";
+  const r = role.toLowerCase();
+  if (r.includes("vp") || r.includes("director") || r.includes("head") || r.includes("chief"))
+    return "\nROLE FRAMING: This user is a senior leader. Emphasize strategic implications, competitive positioning, portfolio impact, and board-level talking points. Lead with business impact, not technical minutiae.";
+  if (r.includes("quality") || r.includes("qa") || r.includes("compliance"))
+    return "\nROLE FRAMING: This user owns quality/compliance. Emphasize specific regulatory requirements, compliance deadlines, audit implications, and corrective action expectations. Be precise about which standards and clauses apply.";
+  if (r.includes("regulatory") || r.includes("ra ") || r.includes("submissions"))
+    return "\nROLE FRAMING: This user is a regulatory specialist. Emphasize submission pathways, docket numbers, guidance interpretations, and regulatory precedent. Include specific procedural details and timeline implications for filings.";
+  if (r.includes("clinical") || r.includes("medical") || r.includes("physician"))
+    return "\nROLE FRAMING: This user has a clinical/medical focus. Emphasize evidence quality, clinical endpoints, patient safety implications, and how regulatory actions affect clinical practice or trial design.";
+  return "";
+}
+
 export async function runFeedAgent(
   signals: Signal[],
-  profile?: Profile | null
+  profile?: Profile | null,
+  productContext?: {
+    ownProducts: string[];
+    competitorProducts: string[];
+    productLandscape?: { name: string; advisory_committee?: string; device_class?: string; product_code?: string; regulatory_id?: string; regulatory_pathway?: string }[];
+  }
 ): Promise<Omit<FeedStory, "id" | "created_at">[]> {
   const client = getAnthropic();
 
@@ -324,12 +344,35 @@ USER PROFILE (personalize stories for this user):
 - Tracked products: ${profile.tracked_products.join(", ") || "none"}
 - Active submissions: ${profile.active_submissions.join(", ") || "none"}
 - Competitors: ${profile.competitors.join(", ") || "none"}
+${profile.regulatory_frameworks?.length ? `- Regulatory frameworks: ${profile.regulatory_frameworks.join(", ")}` : ""}
+${profile.analysis_preferences ? `- Analysis priorities: ${profile.analysis_preferences}` : ""}
+${productContext ? `
+- USER'S OWN PRODUCTS (highest priority — always cover news about these): ${productContext.ownProducts.join(", ") || "none specified"}
+- COMPETITOR PRODUCTS (track closely — cover news and compare to user's products): ${productContext.competitorProducts.join(", ") || "none specified"}
+${productContext.productLandscape?.length ? `
+PRODUCT LANDSCAPE (use this to identify relevant signals even when the exact product name isn't mentioned):
+${productContext.productLandscape.map(p => `- ${p.name}${p.regulatory_id ? ` (${p.regulatory_id})` : ""}${p.regulatory_pathway ? ` — ${p.regulatory_pathway} clearance` : ""}
+  ${[
+    p.advisory_committee ? `Advisory committee: ${p.advisory_committee}` : "",
+    p.device_class ? `Device class: ${p.device_class}` : "",
+    p.product_code ? `FDA product code: ${p.product_code}` : "",
+  ].filter(Boolean).join(" | ")}`).join("\n")}
+` : ""}
+PRODUCT COVERAGE RULES:
+- If any signal mentions a user's own product by name, it MUST become a story (never skip).
+- If any signal mentions a competitor product, write a story and note the competitive context.
+- When both own and competitor products appear in the same therapeutic area, synthesize a competitive landscape story.
+- Tag product-specific stories with the product name in the headline when possible.
+- LANDSCAPE COVERAGE: Even if a signal doesn't mention the user's product by name, cover it if it relates to the same device class, advisory committee, regulatory pathway, or product code. For example, if the user tracks a 510(k) dental device, a signal about FDA dental device guidance or a competitor's 510(k) clearance is directly relevant.
+- Generate AT LEAST 5 stories that are relevant to the user's product landscape (direct mentions, same device class, same advisory committee, same regulatory pathway, competitor activity). These should be clearly marked with relevance_reason.` : ""}
 `
     : "No user profile — generate globally relevant stories.\n";
 
+  const roleFraming = profile ? getRoleFraming(profile.role) : "";
+
   const systemPrompt = `You are the senior editorial director at a leading regulatory intelligence firm, producing a comprehensive daily briefing for pharma/device professionals. Your output should read like the Financial Times or Reuters health policy desk — authoritative, specific, deeply analytical. Every story must feel like it was written by a 20-year regulatory affairs veteran, not summarized by a machine.
 
-${profileContext}
+${profileContext}${roleFraming}
 
 YOUR WORKFLOW:
 1. CHECK DIGEST CONTEXT: Call get_latest_digest ONCE to understand what was covered before.
@@ -367,6 +410,7 @@ STORY FORMAT — each story in the JSON array must have:
 - "signal_indices": array of 0-based indices referencing which signals this story synthesizes. Minimum 1, aim for 3-8 when possible.
 - "source_urls": array of ALL source URLs cited. Include as many as available; aim for 2+ per story.
 - "source_labels": array of human-readable source labels matching source_urls
+- "relevance_reason": ONE sentence explaining why this story matters to this specific user — reference their tracked products, therapeutic areas, or regulatory frameworks by name. If no user profile, omit this field.
 
 CRITICAL RULES:
 - Generate 25-40 stories. Cover the most important signals. MUST cover at least 5 different sections.
@@ -460,6 +504,7 @@ CRITICAL RULES:
               source_labels: enrichedLabels,
               is_global: !profile,
               published_at: derivePublishedAt(s.signal_indices || [], interleaved),
+              relevance_reason: s.relevance_reason || null,
             };
           });
           if (mapped.length > 0) {
@@ -553,6 +598,7 @@ function parseStoriesFromText(
           source_labels: enrichedLabels,
           is_global: true,
           published_at: derivePublishedAt(s.signal_indices || [], signals),
+          relevance_reason: s.relevance_reason || null,
         };
       });
     }

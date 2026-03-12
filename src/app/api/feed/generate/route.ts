@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { runFeedAgent } from "@/lib/feedAgent";
-import { DISABLE_US_SOURCES } from "@/lib/experimentFlags";
-import { Profile, Signal } from "@/lib/types";
+import { selectSignalsForFeed } from "@/lib/signalSelection";
+import { getDerivedProfileArrays } from "@/lib/profileUtils";
+import { Profile } from "@/lib/types";
 import { getSessionProfileId } from "@/lib/session";
 
 export const maxDuration = 300;
@@ -20,81 +21,19 @@ export async function POST() {
       profile = rows[0] || null;
     }
 
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    let paramIdx = 0;
-
-    if (profile) {
-      // "Global" means all regions — only filter by region if "Global" is NOT selected
-      if (profile.regions?.length && !profile.regions.includes("Global")) {
-        paramIdx++;
-        conditions.push(`region = ANY($${paramIdx})`);
-        params.push(profile.regions);
-      }
-      if (profile.domains?.length) {
-        paramIdx++;
-        conditions.push(`domains && $${paramIdx}`);
-        params.push(profile.domains);
-      }
-    }
-
-    // 30-day window and expanded caps for full breadth
-    conditions.push(`created_at > now() - interval '30 days'`);
-
-    const baseWhere = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
-    // Regionally balanced UNION ALL — expanded caps for full breadth.
-    // When DISABLE_US_SOURCES, omit US bucket.
-    const expandedBuckets = [
-      { region: "EU", limit: 80 },
-      { region: "UK", limit: 50 },
-      { region: "Canada", limit: 40 },
-      { region: "Australia", limit: 30 },
-      { region: "Japan", limit: 30 },
-      { region: "Switzerland", limit: 20 },
-      { region: "Global", limit: 60 },
-    ];
-    const regionBuckets: { region: string; limit: number }[] = DISABLE_US_SOURCES
-      ? expandedBuckets
-      : [{ region: "US", limit: 60 }, ...expandedBuckets];
-
-    // If profile has specific regions (not "Global"), only include those buckets
-    const selectedRegions = profile?.regions?.length && !profile.regions.includes("Global")
-      ? profile.regions
-      : null;
-    const activeBuckets = selectedRegions
-      ? regionBuckets.filter((b) => (selectedRegions as string[]).includes(b.region))
-      : regionBuckets;
-
-    const severityOrder = `CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END`;
-    const unionParts = activeBuckets.map((b) => {
-      const regionWhere = baseWhere
-        ? `${baseWhere} AND region = '${b.region}'`
-        : `WHERE region = '${b.region}'`;
-      return `(SELECT * FROM signals ${regionWhere} ORDER BY ${severityOrder}, published_at DESC LIMIT ${b.limit})`;
+    const signalsToUse = await selectSignalsForFeed(profile, profileId, {
+      dayWindow: 30,
+      productReservedSlots: 50,
+      capSignals: 220,
     });
 
-    const signals = unionParts.length > 0
-      ? await query<Signal>(unionParts.join("\n UNION ALL\n"), params)
-      : [];
-
-    // Dedup by id and cap at 220 for full breadth
-    const seenIds = new Set<string>();
-    const dedupedSignals = signals.filter((s) => {
-      if (seenIds.has(s.id)) return false;
-      seenIds.add(s.id);
-      return true;
-    }).slice(0, 220);
-
-    const regionCounts = dedupedSignals.reduce((acc, s) => {
+    const regionCounts = signalsToUse.reduce((acc, s) => {
       acc[s.region] = (acc[s.region] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
     console.log(
-      `[feed/generate] signal selection: ${dedupedSignals.length} total, regions: ${JSON.stringify(regionCounts)}`
+      `[feed/generate] signal selection: ${signalsToUse.length} total, regions: ${JSON.stringify(regionCounts)}`
     );
-
-    const signalsToUse = dedupedSignals;
 
     if (signalsToUse.length === 0) {
       return NextResponse.json({
@@ -103,7 +42,56 @@ export async function POST() {
       });
     }
 
-    const stories = await runFeedAgent(signalsToUse, profile);
+    // Fetch product watch items for product-aware feed generation
+    let productContext: {
+      ownProducts: string[];
+      competitorProducts: string[];
+      productLandscape?: { name: string; advisory_committee?: string; device_class?: string; product_code?: string; regulatory_id?: string; regulatory_pathway?: string }[];
+    } | undefined;
+    if (profileId) {
+      const watchItems = await query<{
+        canonical_name: string; watch_type: string; metadata_json: Record<string, unknown>;
+      }>(
+        `SELECT e.canonical_name, pwi.watch_type, e.metadata_json
+         FROM profile_watch_items pwi
+         JOIN entities e ON e.id = pwi.entity_id
+         WHERE pwi.profile_id = $1 AND e.entity_type = 'product'
+           AND COALESCE(pwi.status, 'active') = 'active'`,
+        [profileId]
+      );
+      if (watchItems.length > 0) {
+        productContext = {
+          ownProducts: watchItems.filter(w => w.watch_type === "exact").map(w => w.canonical_name),
+          competitorProducts: watchItems.filter(w => w.watch_type === "competitor").map(w => w.canonical_name),
+          productLandscape: watchItems
+            .filter(w => w.watch_type === "exact")
+            .map(w => {
+              const meta = w.metadata_json || {};
+              return {
+                name: w.canonical_name,
+                advisory_committee: (meta.advisory_committee as string) || undefined,
+                device_class: (meta.device_class as string) || undefined,
+                product_code: (meta.product_code as string) || undefined,
+                regulatory_id: (meta.regulatory_id as string) || undefined,
+                regulatory_pathway: meta.source_api === "openfda_510k" ? "510(k)" : meta.source_api === "openfda_pma" ? "PMA" : undefined,
+              };
+            }),
+        };
+      }
+    }
+
+    // Use derived tracked_products/competitors from watch items for agent context
+    let profileForAgent = profile;
+    if (profileId && profile) {
+      const derived = await getDerivedProfileArrays(profileId);
+      profileForAgent = {
+        ...profile,
+        tracked_products: derived.tracked_products,
+        competitors: derived.competitors,
+      };
+    }
+
+    const stories = await runFeedAgent(signalsToUse, profileForAgent, productContext);
 
     if (stories.length === 0) {
       return NextResponse.json({
@@ -119,8 +107,9 @@ export async function POST() {
           `INSERT INTO feed_stories (
             profile_id, headline, summary, body, section, severity,
             domains, regions, therapeutic_areas, impact_types,
-            signal_ids, source_urls, source_labels, is_global, published_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            signal_ids, source_urls, source_labels, is_global, published_at,
+            relevance_reason
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             story.profile_id,
             story.headline,
@@ -137,6 +126,7 @@ export async function POST() {
             story.source_labels,
             story.is_global,
             story.published_at,
+            story.relevance_reason || null,
           ]
         );
         inserted++;

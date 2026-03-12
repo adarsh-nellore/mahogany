@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
         email, name, regions, domains, therapeutic_areas,
         product_types, tracked_products, role, organization,
         active_submissions, competitors, regulatory_frameworks,
-        analysis_preferences, digest_cadence, digest_send_hour
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        analysis_preferences, digest_cadence, digest_send_hour, timezone
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       ON CONFLICT (email) DO UPDATE SET
         name = EXCLUDED.name,
         regions = EXCLUDED.regions,
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         analysis_preferences = EXCLUDED.analysis_preferences,
         digest_cadence = EXCLUDED.digest_cadence,
         digest_send_hour = EXCLUDED.digest_send_hour,
+        timezone = EXCLUDED.timezone,
         updated_at = now()
       RETURNING id`,
       [
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
         body.analysis_preferences || "",
         body.digest_cadence || "daily",
         body.digest_send_hour ?? 7,
+        body.timezone || "UTC",
       ]
     );
 

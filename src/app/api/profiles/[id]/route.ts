@@ -39,7 +39,7 @@ export async function PATCH(
       "name", "role", "organization", "regions", "domains",
       "therapeutic_areas", "product_types", "tracked_products",
       "active_submissions", "competitors", "regulatory_frameworks",
-      "analysis_preferences", "digest_cadence", "digest_send_hour",
+      "analysis_preferences", "digest_cadence", "digest_send_hour", "timezone",
     ];
 
     const sets: string[] = [];

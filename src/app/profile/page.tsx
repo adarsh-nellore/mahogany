@@ -48,6 +48,7 @@ interface Profile {
   analysis_preferences: string;
   digest_cadence: string;
   digest_send_hour: number;
+  timezone?: string;
   last_digest_at: string | null;
   created_at: string;
 }
@@ -282,7 +283,7 @@ export default function ProfilePage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>Digest Settings</div>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginTop: 1 }}>
-                  {CADENCE_OPTIONS.find((c) => c.id === profile.digest_cadence)?.label || profile.digest_cadence} at {String(profile.digest_send_hour).padStart(2, "0")}:00 UTC
+                  {CADENCE_OPTIONS.find((c) => c.id === profile.digest_cadence)?.label || profile.digest_cadence} at {String(profile.digest_send_hour).padStart(2, "0")}:00 {profile.timezone && profile.timezone !== "UTC" ? profile.timezone.replace(/_/g, " ") : "UTC"}
                   {profile.last_digest_at ? ` \u00B7 Last sent ${new Date(profile.last_digest_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
                 </div>
               </div>

@@ -18,6 +18,7 @@ interface FeedStory {
   source_urls: string[];
   source_labels: string[];
   published_at: string;
+  relevance_reason?: string | null;
   created_at: string;
 }
 
@@ -29,6 +30,27 @@ interface Profile {
   therapeutic_areas: string[];
   product_types: string[];
   tracked_products: string[];
+}
+
+interface WatchItem {
+  id: string;
+  entity_id: string;
+  canonical_name: string;
+  entity_type: string;
+  watch_type: string;
+  status: string;
+}
+
+interface ProductSearchResult {
+  entity_id?: string;
+  name: string;
+  generic_name?: string;
+  company?: string;
+  product_type: string;
+  domain: string;
+  region: string;
+  regulatory_id?: string;
+  source: string;
 }
 
 // Deterministic color assignment for dynamic AI-generated sections
@@ -77,7 +99,7 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
   return Array.from(map, ([section, stories]) => ({ section, stories }));
 }
 
-function storyMatchesProfile(story: FeedStory, profile: Profile | null): string[] {
+function storyMatchesProfile(story: FeedStory, profile: Profile | null, extraProducts?: WatchItem[]): string[] {
   if (!profile) return [];
   const matches: string[] = [];
   for (const ta of story.therapeutic_areas) {
@@ -88,6 +110,17 @@ function storyMatchesProfile(story: FeedStory, profile: Profile | null): string[
   for (const prod of profile.tracked_products || []) {
     if (story.headline.toLowerCase().includes(prod.toLowerCase()) || story.summary.toLowerCase().includes(prod.toLowerCase())) {
       matches.push(prod);
+    }
+  }
+  // Also check watched product entity names
+  if (extraProducts) {
+    for (const wp of extraProducts) {
+      const name = wp.canonical_name.toLowerCase();
+      if (story.headline.toLowerCase().includes(name) || story.summary.toLowerCase().includes(name)) {
+        if (!matches.some((m) => m.toLowerCase() === name)) {
+          matches.push(wp.canonical_name);
+        }
+      }
     }
   }
   return [...new Set(matches)].slice(0, 3);
@@ -109,12 +142,28 @@ export default function FeedPage() {
   const [searchAnswer, setSearchAnswer] = useState("");
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Product filter state
+  const [watchedProducts, setWatchedProducts] = useState<WatchItem[]>([]);
+  const [activeProductFilters, setActiveProductFilters] = useState<Set<string>>(new Set());
+  const [showProductSearch, setShowProductSearch] = useState(false);
+  const [productSearchInput, setProductSearchInput] = useState("");
+  const [productSearchResults, setProductSearchResults] = useState<ProductSearchResult[]>([]);
+  const [searchingNewProduct, setSearchingNewProduct] = useState(false);
+  const productSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     fetch("/api/profiles/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => {
         if (!p) return;
         setProfile(p);
+        // Load product watch items
+        fetch(`/api/profiles/${p.id}/watch-items`)
+          .then((r) => r.json())
+          .then((data) => {
+            setWatchedProducts((data.items || []).filter((i: WatchItem) => i.entity_type === "product"));
+          })
+          .catch(() => {});
       })
       .catch(() => {});
   }, []);
@@ -122,17 +171,16 @@ export default function FeedPage() {
   const fetchStories = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ per_page: "60" });
-    // Apply profile domain/region filter so Devices-only (or Pharma-only) gets the right content
-    if (profile?.domains?.length) {
-      params.set("domains", profile.domains.join(","));
-    }
-    if (profile?.regions?.length) {
-      params.set("regions", profile.regions.join(","));
-    }
-    // Therapeutic areas: API includes untagged + TA overlap + full-text match, so not overly restrictive
-    if (profile?.therapeutic_areas?.length) {
-      params.set("therapeutic_areas", profile.therapeutic_areas.join(","));
-    }
+    // Stateless for now: comment out default profile filter so we show all content
+    // if (profile?.domains?.length) {
+    //   params.set("domains", profile.domains.join(","));
+    // }
+    // if (profile?.regions?.length) {
+    //   params.set("regions", profile.regions.join(","));
+    // }
+    // if (profile?.therapeutic_areas?.length) {
+    //   params.set("therapeutic_areas", profile.therapeutic_areas.join(","));
+    // }
     try {
       const res = await fetch(`/api/feed/stories?${params}`);
       const data = await res.json();
@@ -140,7 +188,7 @@ export default function FeedPage() {
       setTotal(data.total || 0);
     } catch { /* ignore */ }
     setLoading(false);
-  }, [profile?.domains, profile?.regions, profile?.therapeutic_areas]);
+  }, []); // Stateless: no profile deps
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
 
@@ -182,6 +230,85 @@ export default function FeedPage() {
     searchTimerRef.current = setTimeout(() => handleSemanticSearch(val), 800);
   };
 
+  // Product filter handlers
+  const toggleProductFilter = (entityId: string) => {
+    setActiveProductFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(entityId)) next.delete(entityId);
+      else next.add(entityId);
+      return next;
+    });
+  };
+
+  const clearProductFilters = () => setActiveProductFilters(new Set());
+
+  const handleProductSearchForFeed = async (q: string) => {
+    if (!q || q.trim().length < 2) {
+      setProductSearchResults([]);
+      return;
+    }
+    const domain = profile?.domains?.length === 1 ? profile.domains[0] : "both";
+    setSearchingNewProduct(true);
+    try {
+      const res = await fetch(`/api/products/search?q=${encodeURIComponent(q.trim())}&domain=${domain}`);
+      const data = await res.json();
+      setProductSearchResults(data.results || []);
+    } catch {
+      setProductSearchResults([]);
+    }
+    setSearchingNewProduct(false);
+  };
+
+  const handleProductSearchInputChange = (val: string) => {
+    setProductSearchInput(val);
+    if (productSearchTimerRef.current) clearTimeout(productSearchTimerRef.current);
+    if (!val.trim()) {
+      setProductSearchResults([]);
+      return;
+    }
+    productSearchTimerRef.current = setTimeout(() => handleProductSearchForFeed(val), 400);
+  };
+
+  const addProductFromFeed = async (p: ProductSearchResult, watchType: "exact" | "competitor") => {
+    if (!profile) return;
+    try {
+      const res = await fetch("/api/products/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profile.id, product: p, watch_type: watchType }),
+      });
+      const data = await res.json();
+      if (data.item) {
+        setWatchedProducts((prev) => [...prev, data.item]);
+      }
+    } catch { /* ignore */ }
+    setShowProductSearch(false);
+    setProductSearchInput("");
+    setProductSearchResults([]);
+  };
+
+  const clearAllWatchItems = async () => {
+    if (!profile) return;
+    try {
+      await fetch(`/api/profiles/${profile.id}/watch-items`, { method: "DELETE" });
+      setWatchedProducts([]);
+      setActiveProductFilters(new Set());
+    } catch { /* ignore */ }
+  };
+
+  const removeProductFromFeed = async (item: WatchItem) => {
+    if (!profile) return;
+    try {
+      await fetch(`/api/profiles/${profile.id}/watch-items/${item.id}`, { method: "DELETE" });
+      setWatchedProducts((prev) => prev.filter((p) => p.id !== item.id));
+      setActiveProductFilters((prev) => {
+        const next = new Set(prev);
+        next.delete(item.entity_id);
+        return next;
+      });
+    } catch { /* ignore */ }
+  };
+
   const handleGenerate = async () => {
     setGenerating(true);
     try {
@@ -192,9 +319,20 @@ export default function FeedPage() {
   };
 
   const [lastUpdated] = useState(() => new Date());
-  const hero = stories[0];
-  const secondary = stories.slice(1, 3);
-  const sections = groupBySection(stories.slice(3));
+
+  // Filter stories by active product pills
+  const filteredStories = activeProductFilters.size > 0
+    ? stories.filter((s) => {
+        const text = (s.headline + " " + s.summary).toLowerCase();
+        return watchedProducts
+          .filter((wp) => activeProductFilters.has(wp.entity_id))
+          .some((wp) => text.includes(wp.canonical_name.toLowerCase()));
+      })
+    : stories;
+
+  const hero = filteredStories[0];
+  const secondary = filteredStories.slice(1, 3);
+  const sections = groupBySection(filteredStories.slice(3));
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
@@ -258,6 +396,135 @@ export default function FeedPage() {
             </div>
           </div>
         </form>
+
+        {/* ── Product filter pills ── */}
+        {watchedProducts.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: "var(--space-4)" }}>
+            <button
+              type="button"
+              onClick={clearProductFilters}
+              style={{
+                padding: "4px 10px", borderRadius: "var(--radius-full)",
+                fontSize: "var(--text-xs)", fontWeight: 600, cursor: "pointer",
+                background: activeProductFilters.size === 0 ? "var(--color-fg)" : "var(--color-surface)",
+                color: activeProductFilters.size === 0 ? "var(--color-fg-inverse)" : "var(--color-fg-muted)",
+                border: activeProductFilters.size === 0 ? "none" : "1px solid var(--color-border)",
+                fontFamily: "var(--font-sans)",
+              }}
+            >
+              All
+            </button>
+            {watchedProducts.map((wp) => {
+              const isActive = activeProductFilters.has(wp.entity_id);
+              const isOwn = wp.watch_type === "exact";
+              return (
+                <span key={wp.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleProductFilter(wp.entity_id)}
+                    style={{
+                      padding: "4px 10px", borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
+                      background: isActive
+                        ? (isOwn ? "var(--color-primary-subtle)" : "var(--color-surface-raised)")
+                        : "var(--color-surface)",
+                      color: isActive
+                        ? (isOwn ? "var(--color-primary)" : "var(--color-fg)")
+                        : "var(--color-fg-muted)",
+                      border: isActive
+                        ? (isOwn ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border-strong)")
+                        : "1px solid var(--color-border)",
+                      fontFamily: "var(--font-sans)",
+                    }}
+                  >
+                    {wp.canonical_name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeProductFromFeed(wp)}
+                    title="Remove product"
+                    style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      color: "var(--color-fg-placeholder)", fontSize: 12, lineHeight: 1, padding: 0,
+                    }}
+                  >
+                    &times;
+                  </button>
+                </span>
+              );
+            })}
+            <div style={{ position: "relative", display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={clearAllWatchItems}
+                title="Clear all tracked products"
+                style={{
+                  padding: "4px 8px", borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-2xs)", fontWeight: 600, cursor: "pointer",
+                  background: "none", border: "1px solid var(--color-border)",
+                  color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)",
+                }}
+              >
+                Clear all
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProductSearch((v) => !v)}
+                style={{
+                  width: 24, height: 24, borderRadius: "var(--radius-full)",
+                  background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                  color: "var(--color-fg-muted)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 14, fontWeight: 600, lineHeight: 1,
+                }}
+                title="Add product"
+              >
+                +
+              </button>
+              {showProductSearch && (
+                <div style={{
+                  position: "absolute", top: 30, left: 0, zIndex: 20,
+                  width: 320, background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                  borderRadius: "var(--radius-md)", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  padding: 8,
+                }}>
+                  <input
+                    className="input"
+                    value={productSearchInput}
+                    onChange={(e) => handleProductSearchInputChange(e.target.value)}
+                    placeholder="Search products..."
+                    autoFocus
+                    style={{ width: "100%", padding: 8, fontSize: "var(--text-sm)", marginBottom: 4 }}
+                  />
+                  {searchingNewProduct && (
+                    <div style={{ padding: 8, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)" }}>Searching…</div>
+                  )}
+                  {productSearchResults.map((p, i) => (
+                    <div key={`${p.name}-${i}`} style={{
+                      padding: "6px 8px", borderBottom: "1px solid var(--color-border)",
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg)", flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{p.name}</div>
+                        {p.company && <div style={{ color: "var(--color-fg-muted)" }}>{p.company}</div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: 4 }}>
+                        <button type="button" onClick={() => addProductFromFeed(p, "exact")}
+                          style={{ fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-sm)", background: "var(--color-primary-subtle)", color: "var(--color-primary)", border: "1px solid var(--color-primary-muted)", cursor: "pointer" }}>
+                          Mine
+                        </button>
+                        <button type="button" onClick={() => addProductFromFeed(p, "competitor")}
+                          style={{ fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-sm)", background: "var(--color-surface-raised)", color: "var(--color-fg-muted)", border: "1px solid var(--color-border)", cursor: "pointer" }}>
+                          Comp
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-5)" }}>
           <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", margin: 0 }}>
@@ -347,7 +614,8 @@ export default function FeedPage() {
                 <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-secondary)", lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-3)" }}>
                   {hero.summary}
                 </p>
-                <ProfileMatchTags story={hero} profile={profile} />
+                <ProfileMatchTags story={hero} profile={profile} extraProducts={watchedProducts} />
+                <RelevanceReason reason={hero.relevance_reason} />
                 <div style={{ marginTop: "auto", paddingTop: "var(--space-3)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                   <SourceBlock labels={hero.source_labels} urls={hero.source_urls} max={2} />
                   <TrustIndicator sourceCount={hero.source_urls.length} severity={hero.severity} />
@@ -376,7 +644,8 @@ export default function FeedPage() {
                     <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", marginBottom: 6 }}>
                       {truncate(s.summary, 120)}
                     </p>
-                    <ProfileMatchTags story={s} profile={profile} />
+                    <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
+                    <RelevanceReason reason={s.relevance_reason} />
                     <SourceBlock labels={s.source_labels} urls={s.source_urls} max={1} />
                   </article>
                 </Link>
@@ -405,7 +674,8 @@ export default function FeedPage() {
                   <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", flex: 1, marginBottom: 6 }}>
                     {truncate(s.summary || s.body, 120)}
                   </p>
-                  <ProfileMatchTags story={s} profile={profile} />
+                  <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
+                  <RelevanceReason reason={s.relevance_reason} />
                   <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
                 </article>
               </Link>
@@ -447,7 +717,8 @@ export default function FeedPage() {
                     <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", flex: 1, marginBottom: 8 }}>
                       {truncate(s.summary || s.body, 100)}
                     </p>
-                    <ProfileMatchTags story={s} profile={profile} />
+                    <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
+                    <RelevanceReason reason={s.relevance_reason} />
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                       <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
                       <FeedbackButtons storyId={s.id} />
@@ -467,6 +738,20 @@ export default function FeedPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+/* ─── Relevance reason ─── */
+function RelevanceReason({ reason }: { reason?: string | null }) {
+  if (!reason) return null;
+  return (
+    <p style={{
+      fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", fontStyle: "italic",
+      color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)",
+      margin: 0, marginBottom: 6,
+    }}>
+      Why this matters: {reason}
+    </p>
   );
 }
 
@@ -496,8 +781,8 @@ function FreshnessBadge({ createdAt, publishedAt }: { createdAt?: string; publis
 }
 
 /* ─── Profile match tags ─── */
-function ProfileMatchTags({ story, profile }: { story: FeedStory; profile: Profile | null }) {
-  const matches = storyMatchesProfile(story, profile);
+function ProfileMatchTags({ story, profile, extraProducts }: { story: FeedStory; profile: Profile | null; extraProducts?: WatchItem[] }) {
+  const matches = storyMatchesProfile(story, profile, extraProducts);
   if (matches.length === 0 && story.therapeutic_areas.length === 0) return null;
   const display = matches.length > 0 ? matches : story.therapeutic_areas.slice(0, 2);
   return (

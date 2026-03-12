@@ -125,6 +125,7 @@ export interface Profile {
   analysis_preferences: string;
   digest_cadence: DigestCadence;
   digest_send_hour: number;
+  timezone?: string;
   last_digest_at: string | null;
   created_at: string;
   updated_at: string;
@@ -147,6 +148,7 @@ export interface FeedStory {
   source_labels: string[];
   is_global: boolean;
   published_at: string;
+  relevance_reason?: string | null;
   created_at: string;
 }
 
@@ -243,6 +245,7 @@ export interface ProfileCreateRequest {
   analysis_preferences: string;
   digest_cadence: DigestCadence;
   digest_send_hour: number;
+  timezone?: string;
   intake_text?: string;
   intake_session_id?: string;
 }
@@ -281,6 +284,24 @@ export interface DigestSendSummary {
   total_sent: number;
   profiles: { id: string; email: string; signal_count: number }[];
   errors: string[];
+}
+
+// ─── Product Search ─────────────────────────────────────────────────
+
+export interface ProductSearchResult {
+  entity_id?: string;
+  name: string;
+  generic_name?: string;
+  company?: string;
+  product_type: "drug" | "biologic" | "device" | "combination";
+  domain: "pharma" | "devices";
+  region: string;
+  regulatory_id?: string;
+  product_code?: string;
+  advisory_committee?: string;
+  device_class?: string;
+  source: "openfda_drug" | "openfda_510k" | "openfda_pma" | "health_canada" | "local";
+  is_primary?: boolean;
 }
 
 // ─── Fetcher Config ──────────────────────────────────────────────────

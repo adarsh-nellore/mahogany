@@ -21,6 +21,7 @@ interface Profile {
   analysis_preferences: string;
   digest_cadence: string;
   digest_send_hour: number;
+  timezone?: string;
 }
 
 const CADENCE_OPTIONS = [
@@ -38,6 +39,21 @@ const ALL_TAS = [
 ];
 
 const REGION_OPTIONS = ["US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"];
+
+const TIMEZONE_OPTIONS = [
+  { value: "UTC", label: "UTC" },
+  { value: "America/New_York", label: "Eastern (US)" },
+  { value: "America/Chicago", label: "Central (US)" },
+  { value: "America/Denver", label: "Mountain (US)" },
+  { value: "America/Los_Angeles", label: "Pacific (US)" },
+  { value: "Europe/London", label: "London" },
+  { value: "Europe/Paris", label: "Paris" },
+  { value: "Europe/Berlin", label: "Berlin" },
+  { value: "Asia/Tokyo", label: "Tokyo" },
+  { value: "Asia/Singapore", label: "Singapore" },
+  { value: "Australia/Sydney", label: "Sydney" },
+  { value: "Asia/Kolkata", label: "India" },
+];
 const DOMAIN_OPTIONS = [
   { id: "devices", label: "Devices" },
   { id: "pharma", label: "Pharma" },
@@ -73,6 +89,7 @@ export default function DigestPage() {
 
   const [cadence, setCadence] = useState("daily");
   const [sendHour, setSendHour] = useState(7);
+  const [timezone, setTimezone] = useState("UTC");
   const [digestTAs, setDigestTAs] = useState<string[]>([]);
   const [digestRegions, setDigestRegions] = useState<string[]>([]);
   const [digestDomains, setDigestDomains] = useState<string[]>([]);
@@ -101,6 +118,7 @@ export default function DigestPage() {
         setProfile(p);
         setCadence(p.digest_cadence || "daily");
         setSendHour(p.digest_send_hour ?? 7);
+        setTimezone(p.timezone || "UTC");
         setDigestTAs(p.therapeutic_areas || []);
         setDigestRegions(p.regions || []);
         setDigestDomains(p.domains || []);
@@ -124,6 +142,7 @@ export default function DigestPage() {
         body: JSON.stringify({
           digest_cadence: cadence,
           digest_send_hour: sendHour,
+          timezone,
           therapeutic_areas: digestTAs,
           regions: digestRegions,
           domains: digestDomains,
@@ -187,17 +206,33 @@ export default function DigestPage() {
                 {/* Send time */}
                 <div>
                   <SidebarLabel>Send Time</SidebarLabel>
-                  <select value={sendHour} onChange={(e) => { setSendHour(parseInt(e.target.value, 10)); markDirty(); }}
-                    style={{
-                      width: "100%", padding: "6px 8px", borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--color-border)", background: "var(--color-bg)",
-                      fontSize: "var(--text-xs)", fontFamily: "var(--font-sans)", color: "var(--color-fg)",
-                      outline: "none",
-                    }}>
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>
-                    ))}
-                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select value={sendHour} onChange={(e) => { setSendHour(parseInt(e.target.value, 10)); markDirty(); }}
+                      style={{
+                        flex: 1, padding: "6px 8px", borderRadius: "var(--radius-md)",
+                        border: "1px solid var(--color-border)", background: "var(--color-bg)",
+                        fontSize: "var(--text-xs)", fontFamily: "var(--font-sans)", color: "var(--color-fg)",
+                        outline: "none",
+                      }}>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
+                      ))}
+                    </select>
+                    <select value={timezone} onChange={(e) => { setTimezone(e.target.value); markDirty(); }}
+                      style={{
+                        flex: 1, padding: "6px 8px", borderRadius: "var(--radius-md)",
+                        border: "1px solid var(--color-border)", background: "var(--color-bg)",
+                        fontSize: "var(--text-xs)", fontFamily: "var(--font-sans)", color: "var(--color-fg)",
+                        outline: "none",
+                      }}>
+                      {TIMEZONE_OPTIONS.map((tz) => (
+                        <option key={tz.value} value={tz.value}>{tz.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p style={{ fontSize: 10, color: "var(--color-fg-placeholder)", fontFamily: "var(--font-sans)", margin: "4px 0 0", lineHeight: 1.4 }}>
+                    Digest and feed update at {String(sendHour).padStart(2, "0")}:00 in your timezone.
+                  </p>
                 </div>
 
                 <div style={{ height: 1, background: "var(--color-border)" }} />

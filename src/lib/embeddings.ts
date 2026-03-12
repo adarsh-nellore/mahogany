@@ -9,6 +9,7 @@
 
 import OpenAI from "openai";
 import { query } from "./db";
+import { getDerivedProfileArrays } from "./profileUtils";
 import type { Signal, Profile } from "./types";
 
 function getOpenAI() {
@@ -244,16 +245,17 @@ export async function findSimilarSignals(
  * Concatenates all profile context into one text and embeds it.
  */
 export async function buildProfileVector(profile: Profile): Promise<void> {
+  const derived = await getDerivedProfileArrays(profile.id);
   const interestParts: string[] = [];
 
   if (profile.therapeutic_areas.length > 0) {
     interestParts.push(`Therapeutic areas: ${profile.therapeutic_areas.join(", ")}`);
   }
-  if (profile.tracked_products.length > 0) {
-    interestParts.push(`Products: ${profile.tracked_products.join(", ")}`);
+  if (derived.tracked_products.length > 0) {
+    interestParts.push(`Products: ${derived.tracked_products.join(", ")}`);
   }
-  if (profile.competitors.length > 0) {
-    interestParts.push(`Competitors: ${profile.competitors.join(", ")}`);
+  if (derived.competitors.length > 0) {
+    interestParts.push(`Competitors: ${derived.competitors.join(", ")}`);
   }
   if (profile.active_submissions.length > 0) {
     interestParts.push(`Submissions: ${profile.active_submissions.join(", ")}`);

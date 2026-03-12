@@ -1,143 +1,143 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-type ParsedMention = {
-  mention_text: string;
-  mention_type: "product_name" | "product_code" | "company" | "ta" | "framework";
-  confidence: number;
-};
+// ─── Types ──────────────────────────────────────────────────────────
 
-type ResolvedMention = ParsedMention & {
-  entity_id: string;
-  canonical_name: string;
-  resolution: "exact" | "alias" | "created";
-};
+interface ProductInfo {
+  name: string;
+  generic_name?: string;
+  company?: string;
+  product_type: string;
+  domain: string;
+  region?: string;
+  regulatory_id?: string;
+  source?: string;
+}
 
-const REGION_OPTIONS = ["US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"] as const;
-const DOMAIN_OPTIONS = [
-  { id: "devices", label: "Medical Devices" },
-  { id: "pharma", label: "Pharma & Biologics" },
-] as const;
-const THERAPEUTIC_AREA_OPTIONS = [
-  "oncology", "cardiology", "neurology", "orthopedics", "endocrinology", "immunology",
-  "dermatology", "ophthalmology", "gastroenterology", "pulmonology", "hematology", "nephrology",
-  "infectious disease", "rare disease", "wound care", "dental", "SaMD", "respiratory", "psychiatry", "pediatrics",
+interface ProductSearchResult {
+  name: string;
+  generic_name?: string;
+  company?: string;
+  product_type: string;
+  domain: string;
+  region?: string;
+  regulatory_id?: string;
+  source: string;
+}
+
+// ─── Constants ──────────────────────────────────────────────────────
+
+const REGIONS = ["US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"];
+
+const DOMAINS = [
+  { value: "pharma", label: "Pharma & Biologics" },
+  { value: "devices", label: "Medical Devices" },
 ];
 
-const STEP_KEYS = ["welcome", "name", "email", "role", "regions", "domains", "therapeutic_areas", "intake", "confirm", "finish"] as const;
-type StepKey = (typeof STEP_KEYS)[number];
+const THERAPEUTIC_AREAS = [
+  "Oncology", "Cardiology", "Neurology", "Orthopedics", "Endocrinology",
+  "Immunology", "Dermatology", "Ophthalmology", "Gastroenterology",
+  "Pulmonology", "Hematology", "Nephrology", "Infectious Disease",
+  "Rare Disease", "Wound Care", "Dental", "SaMD", "Respiratory",
+  "Psychiatry", "Pediatrics", "Radiology",
+];
+
+const FRAMEWORKS = [
+  "510(k)", "PMA", "De Novo", "NDA", "BLA", "ANDA", "IND",
+  "MDR", "IVDR", "CE Marking", "PMDA", "TGA",
+];
+
+const DIGEST_CADENCE_OPTIONS = [
+  { id: "daily" as const, label: "Daily", desc: "Every morning" },
+  { id: "twice_weekly" as const, label: "2x per week", desc: "Tue & Fri" },
+  { id: "weekly" as const, label: "Weekly", desc: "Monday recap" },
+];
+
+const DIGEST_HOUR_OPTIONS = [6, 7, 8, 9];
+
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (US)" },
+  { value: "America/Chicago", label: "Central (US)" },
+  { value: "America/Denver", label: "Mountain (US)" },
+  { value: "America/Los_Angeles", label: "Pacific (US)" },
+  { value: "Europe/London", label: "London" },
+  { value: "Europe/Paris", label: "Paris" },
+  { value: "Europe/Berlin", label: "Berlin" },
+  { value: "Asia/Tokyo", label: "Tokyo" },
+  { value: "Asia/Singapore", label: "Singapore" },
+  { value: "Australia/Sydney", label: "Sydney" },
+  { value: "Asia/Kolkata", label: "India" },
+  { value: "UTC", label: "UTC" },
+];
+
+// ─── Step type ──────────────────────────────────────────────────────
+
+type Step = "identity" | "focus" | "products" | "confirm";
+const STEPS: Step[] = ["identity", "focus", "products", "confirm"];
+
+// ─── Component ──────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [stepIndex, setStepIndex] = useState(0);
+  const [step, setStep] = useState<Step>("identity");
+
+  // Identity
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("");
-  const [regions, setRegions] = useState<string[]>(["US"]);
-  const [domains, setDomains] = useState<string[]>(["devices", "pharma"]);
+  const [organization, setOrganization] = useState("");
+
+  // Focus
+  const [regions, setRegions] = useState<string[]>([]);
+  const [domains, setDomains] = useState<string[]>([]);
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>([]);
-  const [intakeText, setIntakeText] = useState("");
-  const [loadingParse, setLoadingParse] = useState(false);
-  const [loadingSubmit, setLoadingSubmit] = useState(false);
+  const [frameworks, setFrameworks] = useState<string[]>([]);
+
+  // Digest schedule
+  const [digestCadence, setDigestCadence] = useState<"daily" | "twice_weekly" | "weekly">("daily");
+  const [digestSendHour, setDigestSendHour] = useState(7);
+  const [timezone, setTimezone] = useState("America/New_York");
+
+  // Products
+  const [ownProducts, setOwnProducts] = useState<ProductInfo[]>([]);
+  const [competitorProducts, setCompetitorProducts] = useState<ProductInfo[]>([]);
+  const [competitors, setCompetitors] = useState<string[]>([]);
+  const [competitorInput, setCompetitorInput] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // Submit
+  const [submitting, setSubmitting] = useState(false);
   const [sendingDigest, setSendingDigest] = useState(false);
   const [error, setError] = useState("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [resolved, setResolved] = useState<ResolvedMention[]>([]);
-  const [followups, setFollowups] = useState<string[]>([]);
-  const [selectedMentions, setSelectedMentions] = useState<Record<string, boolean>>({});
   const [showEmailError, setShowEmailError] = useState(false);
 
-  const canParse = role.trim().length > 0 && regions.length > 0 && intakeText.trim().length > 2;
-  const canCreateProfile = name.trim().length > 0 && email.includes("@") && domains.length > 0;
-
-  const toggleRegion = (r: string) => {
-    setRegions((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
-  };
-  const toggleDomain = (id: string) => {
-    setDomains((prev) =>
-      prev.includes(id) ? (prev.length > 1 ? prev.filter((x) => x !== id) : prev) : [...prev, id]
-    );
-  };
-  const toggleTherapeuticArea = (ta: string) => {
-    setTherapeuticAreas((prev) => (prev.includes(ta) ? prev.filter((x) => x !== ta) : [...prev, ta]));
-  };
-
-  const selectedWatchItems = useMemo(
-    () =>
-      resolved
-        .filter((r) => selectedMentions[r.entity_id] !== false)
-        .map((r) => ({
-          mention_text: r.mention_text,
-          watch_type: r.mention_type === "company" ? "competitor" : "exact",
-          priority: r.mention_type === "product_code" ? 95 : 80,
-        })),
-    [resolved, selectedMentions]
-  );
-
-  const steps = useMemo(() => {
-    const base: StepKey[] = ["welcome", "name", "email", "role", "regions", "domains", "therapeutic_areas", "intake"];
-    if (resolved.length > 0) base.push("confirm");
-    base.push("finish");
-    return base;
-  }, [resolved.length]);
-
-  const currentStepKey = steps[stepIndex];
-  const totalSteps = steps.length;
-  const progress = totalSteps > 0 ? ((stepIndex + 1) / totalSteps) * 100 : 0;
-
-  async function parseIntake() {
-    if (!canParse) return;
-    setError("");
-    setLoadingParse(true);
+  // Detect browser timezone on mount; use if in our list, else keep default
+  useEffect(() => {
     try {
-      const res = await fetch("/api/intake/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: intakeText }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to parse");
-        return;
-      }
-      setSessionId(data.session_id);
-      setResolved(data.resolved || []);
-      setFollowups(data.parsed?.suggested_followups || []);
-      const initial: Record<string, boolean> = {};
-      for (const r of data.resolved || []) initial[r.entity_id] = true;
-      setSelectedMentions(initial);
-      setStepIndex((i) => Math.min(i + 1, steps.length));
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoadingParse(false);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz && TIMEZONE_OPTIONS.some((t) => t.value === tz)) setTimezone(tz);
+    } catch {
+      /* ignore */
     }
-  }
+  }, []);
 
-  function goNext() {
-    if (currentStepKey === "intake" && intakeText.trim().length > 2 && canParse) {
-      parseIntake();
-      return;
-    }
-    if (currentStepKey === "intake" && !intakeText.trim()) {
-      setStepIndex((i) => Math.min(i + 1, steps.length - 1));
-      return;
-    }
-    setStepIndex((i) => Math.min(i + 1, steps.length - 1));
-  }
+  // Step navigation
+  const stepIdx = STEPS.indexOf(step);
+  const goNext = () => { if (stepIdx < STEPS.length - 1) setStep(STEPS[stepIdx + 1]); };
+  const goBack = () => { if (stepIdx > 0) setStep(STEPS[stepIdx - 1]); };
 
-  function goBack() {
-    setStepIndex((i) => Math.max(0, i - 1));
-    setError("");
-  }
+  // Validation
+  const canProceedFromIdentity = name.trim().length > 0 && email.includes("@");
+  const canProceedFromFocus = regions.length > 0 && domains.length > 0;
+
+  // ─── Profile creation ─────────────────────────────────────────────
 
   async function finalizeProfile() {
-    if (!canCreateProfile) return;
     setError("");
-    setLoadingSubmit(true);
+    setSubmitting(true);
     try {
       const profileRes = await fetch("/api/profiles", {
         method: "POST",
@@ -145,47 +145,68 @@ export default function OnboardingPage() {
         body: JSON.stringify({
           email,
           name,
-          role,
-          regions,
-          domains,
-          therapeutic_areas: [
-            ...new Set([
-              ...therapeuticAreas,
-              ...resolved.filter((r) => r.mention_type === "ta").map((r) => r.canonical_name.toLowerCase()),
-            ]),
-          ],
+          role: role || "",
+          regions: regions.length ? regions : ["US"],
+          domains: domains.length ? domains : ["devices", "pharma"],
+          therapeutic_areas: therapeuticAreas,
           product_types: [],
-          tracked_products: resolved.filter((r) => r.mention_type === "product_name" || r.mention_type === "product_code").map((r) => r.canonical_name),
-          organization: "",
+          tracked_products: ownProducts.map((p) => p.name),
+          organization: organization || "",
           active_submissions: [],
-          competitors: resolved.filter((r) => r.mention_type === "company").map((r) => r.canonical_name),
-          regulatory_frameworks: resolved.filter((r) => r.mention_type === "framework").map((r) => r.canonical_name),
-          analysis_preferences: `Role: ${role}. Intake: ${intakeText}`,
-          digest_cadence: "daily",
-          digest_send_hour: 7,
-          intake_text: intakeText,
+          competitors: [
+            ...competitors,
+            ...competitorProducts.map((p) => p.company || p.name),
+          ],
+          regulatory_frameworks: frameworks,
+          analysis_preferences: notes ? `Notes: ${notes}` : "",
+          digest_cadence: digestCadence,
+          digest_send_hour: digestSendHour,
+          timezone,
+          intake_text: [
+            role && `Role: ${role}`,
+            organization && `Org: ${organization}`,
+            ownProducts.length && `Products: ${ownProducts.map(p => p.name).join(", ")}`,
+            competitorProducts.length && `Competitor products: ${competitorProducts.map(p => p.name).join(", ")}`,
+            notes && `Notes: ${notes}`,
+          ].filter(Boolean).join(". "),
         }),
       });
-      const profileData = await profileRes.json();
+      const profileResult = await profileRes.json();
       if (!profileRes.ok) {
-        setError(profileData.error || "Failed to create profile");
+        setError(profileResult.error || "Failed to create profile");
         return;
       }
-      if (sessionId) {
-        await fetch("/api/intake/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, profile_id: profileData.id, watch_items: selectedWatchItems }),
-        });
+
+      // Register products as watch items
+      const allProducts = [
+        ...ownProducts.map((p) => ({ product: p, watch_type: "exact" as const })),
+        ...competitorProducts.map((p) => ({ product: p, watch_type: "competitor" as const })),
+      ];
+      for (const sel of allProducts) {
+        try {
+          await fetch("/api/products/select", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              profile_id: profileResult.id,
+              product: sel.product,
+              watch_type: sel.watch_type,
+            }),
+          });
+        } catch {
+          // Non-blocking
+        }
       }
-      setLoadingSubmit(false);
+
+      setSubmitting(false);
       setSendingDigest(true);
+
       let emailFailed: string | null = null;
       try {
         const digestRes = await fetch("/api/send-digest-now", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profile_id: profileData.id }),
+          body: JSON.stringify({ profile_id: profileResult.id }),
         });
         const digestData = await digestRes.json().catch(() => ({}));
         if (!digestRes.ok) {
@@ -198,9 +219,9 @@ export default function OnboardingPage() {
       } finally {
         setSendingDigest(false);
       }
+
       if (emailFailed) {
-        setError(`Profile created, but the welcome email could not be sent: ${emailFailed}. You can still use your feed below.`);
-        setSendingDigest(false);
+        setError(`Profile created, but welcome email failed: ${emailFailed}. You can still use your feed.`);
         setShowEmailError(true);
         return;
       }
@@ -208,419 +229,639 @@ export default function OnboardingPage() {
     } catch (err) {
       setError(String(err));
     } finally {
-      setLoadingSubmit(false);
+      setSubmitting(false);
     }
   }
 
-  const containerStyle: React.CSSProperties = {
-    minHeight: "100vh",
-    background: "var(--color-bg)",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px 20px",
-  };
-
-  const cardStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 520,
-    margin: "0 auto",
-  };
-
-  const progressBarStyle: React.CSSProperties = {
-    width: "100%",
-    maxWidth: 520,
-    height: 4,
-    background: "var(--color-surface-raised)",
-    borderRadius: 2,
-    overflow: "hidden",
-    marginBottom: 32,
-  };
+  // ─── Render ───────────────────────────────────────────────────────
 
   return (
-    <main style={containerStyle}>
-      {totalSteps > 0 && (
-        <div style={progressBarStyle}>
-          <div style={{ width: `${progress}%`, height: "100%", background: "var(--color-primary)", transition: "width 0.3s ease" }} />
-        </div>
-      )}
+    <main style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
+      {/* Progress bar */}
+      <div style={{ height: 3, background: "var(--color-surface-raised)", flexShrink: 0 }}>
+        <div style={{
+          height: "100%",
+          width: `${((stepIdx + 1) / STEPS.length) * 100}%`,
+          background: "var(--color-primary)",
+          transition: "width 0.3s ease",
+        }} />
+      </div>
 
-      <div style={cardStyle}>
-        {/* Welcome */}
-        {currentStepKey === "welcome" && (
-          <>
-            <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 12 }}>
-              Set up your intelligence profile
-            </h1>
-            <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-muted)", lineHeight: 1.6, marginBottom: 32 }}>
-              A few questions and you&apos;ll get a personalized feed and daily digest tailored to your portfolio and markets.
-            </p>
-            <button type="button" className="btn btn-primary btn-lg" onClick={goNext}>
-              Get started
-            </button>
-          </>
-        )}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 20px" }}>
+        <div style={{ width: "100%", maxWidth: 520 }}>
 
-        {/* Name */}
-        {currentStepKey === "name" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              What&apos;s your name?
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              We&apos;ll use this to personalize your briefing.
-            </p>
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Jane Park"
-              autoFocus
-              style={{ width: "100%", padding: 12, fontSize: "var(--text-base)", marginBottom: 24 }}
-            />
-            <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext} disabled={!name.trim()}>Next</button>
-            </div>
-          </>
-        )}
+          {/* ─── Step: Identity ─── */}
+          {step === "identity" && (
+            <>
+              <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
+                Set up your intelligence profile
+              </h1>
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: 1.6, marginBottom: 32 }}>
+                Tell us about yourself so we can personalize your regulatory feed and alerts.
+              </p>
 
-        {/* Email */}
-        {currentStepKey === "email" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              What&apos;s your work email?
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              We&apos;ll send your daily digest here.
-            </p>
-            <input
-              className="input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="jane@company.com"
-              autoFocus
-              style={{ width: "100%", padding: 12, fontSize: "var(--text-base)", marginBottom: 24 }}
-            />
-            <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext} disabled={!email.includes("@")}>Next</button>
-            </div>
-          </>
-        )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 32 }}>
+                <FormField label="Name" required>
+                  <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Park" autoFocus />
+                </FormField>
+                <FormField label="Work email" required>
+                  <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@company.com" />
+                </FormField>
+                <FormField label="Role">
+                  <input className="input" value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. VP Regulatory Affairs" />
+                </FormField>
+                <FormField label="Organization">
+                  <input className="input" value={organization} onChange={(e) => setOrganization(e.target.value)} placeholder="e.g. Acme Pharma" />
+                </FormField>
+              </div>
 
-        {/* Role */}
-        {currentStepKey === "role" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              What&apos;s your role?
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              e.g. VP Regulatory Affairs, Director of Quality
-            </p>
-            <input
-              className="input"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="VP Regulatory Affairs"
-              autoFocus
-              style={{ width: "100%", padding: 12, fontSize: "var(--text-base)", marginBottom: 24 }}
-            />
-            <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext} disabled={!role.trim()}>Next</button>
-            </div>
-          </>
-        )}
-
-        {/* Regions */}
-        {currentStepKey === "regions" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              Which markets do you follow?
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              Select all that apply.
-            </p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-              {REGION_OPTIONS.map((r) => {
-                const active = regions.includes(r);
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    className="btn btn-md"
-                    onClick={() => toggleRegion(r)}
-                    style={{
-                      border: active ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
-                      background: active ? "var(--color-primary-subtle)" : "var(--color-surface)",
-                    }}
-                  >
-                    {r}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext} disabled={regions.length === 0}>Next</button>
-            </div>
-          </>
-        )}
-
-        {/* Domains */}
-        {currentStepKey === "domains" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              What&apos;s your focus?
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              Pick at least one.
-            </p>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-              {DOMAIN_OPTIONS.map((d) => {
-                const active = domains.includes(d.id);
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    className="btn btn-md"
-                    onClick={() => toggleDomain(d.id)}
-                    style={{
-                      border: active ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
-                      background: active ? "var(--color-primary-subtle)" : "var(--color-surface)",
-                    }}
-                  >
-                    {d.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext} disabled={domains.length === 0}>Next</button>
-            </div>
-          </>
-        )}
-
-        {/* Therapeutic areas */}
-        {currentStepKey === "therapeutic_areas" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              Therapeutic areas (optional)
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              We&apos;ll prioritize stories in these areas. You can skip.
-            </p>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 24 }}>
-              {THERAPEUTIC_AREA_OPTIONS.map((ta) => {
-                const active = therapeuticAreas.includes(ta);
-                return (
-                  <button
-                    key={ta}
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => toggleTherapeuticArea(ta)}
-                    style={{
-                      border: active ? "2px solid var(--color-primary)" : "1px solid var(--color-border)",
-                      background: active ? "var(--color-primary-subtle)" : "var(--color-surface)",
-                      fontSize: "var(--text-xs)",
-                    }}
-                  >
-                    {ta}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-ghost btn-md" onClick={goNext}>Skip</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext}>Next</button>
-            </div>
-          </>
-        )}
-
-        {/* Intake */}
-        {currentStepKey === "intake" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              Products or submissions (optional)
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              In one sentence, e.g. &quot;We are preparing PMA P200123 for CardioSense Pro and track competitor K123456.&quot; We&apos;ll parse and watch these. You can skip.
-            </p>
-            <textarea
-              className="input"
-              rows={4}
-              value={intakeText}
-              onChange={(e) => setIntakeText(e.target.value)}
-              placeholder='Example: "We are preparing PMA P200123 for CardioSense Pro and track competitor K123456 in cardiology."'
-              style={{ width: "100%", padding: 12, fontSize: "var(--text-base)", marginBottom: 24, resize: "vertical" }}
-            />
-            {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--text-sm)", marginBottom: 12 }}>{error}</p>}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-ghost btn-md" onClick={goNext}>Skip</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext} disabled={loadingParse}>
-                {loadingParse ? "Parsing…" : intakeText.trim().length > 2 ? "Parse & next" : "Next"}
+              <button type="button" className="btn btn-primary btn-lg" onClick={goNext} disabled={!canProceedFromIdentity} style={{ width: "100%" }}>
+                Continue
               </button>
-            </div>
-          </>
-        )}
+              <BackLink />
+            </>
+          )}
 
-        {/* Confirm (only when we have resolved items) */}
-        {currentStepKey === "confirm" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              Confirm what we found
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              Uncheck any you don&apos;t want to watch.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-              {resolved.map((r) => {
-                const checked = selectedMentions[r.entity_id] !== false;
-                return (
-                  <label key={r.entity_id} style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer" }}>
-                    <input type="checkbox" checked={checked} onChange={() => setSelectedMentions((prev) => ({ ...prev, [r.entity_id]: !checked }))} />
-                    <span><strong>{r.canonical_name}</strong> ({r.mention_type})</span>
-                  </label>
-                );
-              })}
-            </div>
-            {followups.length > 0 && (
-              <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 16 }}>{followups.join(" ")}</p>
-            )}
-            <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack}>Back</button>
-              <button type="button" className="btn btn-primary btn-md" onClick={goNext}>Next</button>
-            </div>
-          </>
-        )}
+          {/* ─── Step: Focus ─── */}
+          {step === "focus" && (
+            <>
+              <StepHeader title="Your focus areas" subtitle="Select the markets, domains, and therapeutic areas you follow." onBack={goBack} />
 
-        {/* Finish — Profile summary: "Is this your profile?" */}
-        {currentStepKey === "finish" && (
-          <>
-            <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
-              Is this your profile?
-            </h2>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              We&apos;ll use this as your knowledge graph to personalize your feed, digests, and search. Confirm or go back to edit.
-            </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: 32 }}>
+                <FormField label="Markets" required>
+                  <ToggleChips items={REGIONS} selected={regions} onToggle={(item) => toggleArray(regions, setRegions, item)} />
+                </FormField>
 
-            <div
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-lg)",
-                padding: "20px 20px 24px",
-                marginBottom: 24,
-                fontSize: "var(--text-sm)",
-              }}
-            >
-              {/* Identity */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>You</div>
-                <div style={{ color: "var(--color-fg)" }}><strong>{name || "—"}</strong></div>
-                <div style={{ color: "var(--color-fg-secondary)" }}>{email || "—"}</div>
-                {role.trim() && <div style={{ color: "var(--color-fg-muted)", marginTop: 4 }}>{role}</div>}
+                <FormField label="Domain" required>
+                  <ToggleChips items={DOMAINS.map(d => d.value)} labels={DOMAINS.reduce((a, d) => ({ ...a, [d.value]: d.label }), {} as Record<string, string>)} selected={domains} onToggle={(item) => toggleArray(domains, setDomains, item)} />
+                </FormField>
+
+                <FormField label="Therapeutic areas">
+                  <ToggleChips items={THERAPEUTIC_AREAS} selected={therapeuticAreas} onToggle={(item) => toggleArray(therapeuticAreas, setTherapeuticAreas, item)} />
+                </FormField>
+
+                <FormField label="Regulatory frameworks">
+                  <ToggleChips items={FRAMEWORKS} selected={frameworks} onToggle={(item) => toggleArray(frameworks, setFrameworks, item)} />
+                </FormField>
               </div>
 
-              {/* Markets & focus */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Markets & focus</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                  {regions.map((r) => (
-                    <span key={r} style={{ padding: "4px 10px", background: "var(--color-surface-raised)", borderRadius: "var(--radius-md)", color: "var(--color-fg)" }}>{r}</span>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {domains.map((d) => (
-                    <span key={d} style={{ padding: "4px 10px", background: "var(--color-primary-subtle)", borderRadius: "var(--radius-md)", color: "var(--color-primary)" }}>
-                      {DOMAIN_OPTIONS.find((o) => o.id === d)?.label ?? d}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <button type="button" className="btn btn-primary btn-lg" onClick={goNext} disabled={!canProceedFromFocus} style={{ width: "100%" }}>
+                Continue
+              </button>
+            </>
+          )}
 
-              {/* Therapeutic areas */}
-              {(therapeuticAreas.length > 0 || resolved.some((r) => r.mention_type === "ta")) && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Therapeutic areas</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {[...new Set([...therapeuticAreas, ...resolved.filter((r) => r.mention_type === "ta").map((r) => r.canonical_name)])].map((ta) => (
-                      <span key={ta} style={{ padding: "4px 10px", background: "var(--color-surface-raised)", borderRadius: "var(--radius-md)", color: "var(--color-fg)" }}>{ta}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {/* ─── Step: Products ─── */}
+          {step === "products" && (
+            <>
+              <StepHeader title="Products & competitors" subtitle="Add specific products you want to track. You can always update these later." onBack={goBack} />
 
-              {/* Parsed from your description (products, codes, companies, frameworks) */}
-              {resolved.length > 0 && (
-                <div>
-                  <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>From your description</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {(["product_name", "product_code", "company", "framework"] as const).map((mention_type) => {
-                      const items = resolved.filter((r) => r.mention_type === mention_type && selectedMentions[r.entity_id] !== false);
-                      if (items.length === 0) return null;
-                      const labels: Record<string, string> = { product_name: "Products / devices", product_code: "Codes & submissions", company: "Companies", framework: "Regulatory frameworks" };
-                      return (
-                        <div key={mention_type}>
-                          <span style={{ color: "var(--color-fg-muted)", marginRight: 8 }}>{labels[mention_type]}:</span>
-                          <span style={{ color: "var(--color-fg)" }}>{items.map((r) => r.canonical_name).join(", ")}</span>
-                        </div>
-                      );
-                    })}
+              <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: 32 }}>
+                <FormField label="Your products" hint="Search for products you're responsible for">
+                  <ProductSearch
+                    domain={domains.length === 1 ? domains[0] as "pharma" | "devices" : "both"}
+                    selected={ownProducts}
+                    onAdd={(p) => setOwnProducts((prev) => [...prev, p])}
+                    onRemove={(name) => setOwnProducts((prev) => prev.filter((p) => p.name !== name))}
+                  />
+                </FormField>
+
+                <FormField label="Competitor products" hint="Products from competitors you want to monitor">
+                  <ProductSearch
+                    domain={domains.length === 1 ? domains[0] as "pharma" | "devices" : "both"}
+                    selected={competitorProducts}
+                    onAdd={(p) => setCompetitorProducts((prev) => [...prev, p])}
+                    onRemove={(name) => setCompetitorProducts((prev) => prev.filter((p) => p.name !== name))}
+                  />
+                </FormField>
+
+                <FormField label="Competitor companies" hint="Company names to track broadly">
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      className="input"
+                      value={competitorInput}
+                      onChange={(e) => setCompetitorInput(e.target.value)}
+                      placeholder="e.g. Medtronic"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && competitorInput.trim()) {
+                          e.preventDefault();
+                          if (!competitors.includes(competitorInput.trim())) {
+                            setCompetitors((prev) => [...prev, competitorInput.trim()]);
+                          }
+                          setCompetitorInput("");
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-md"
+                      disabled={!competitorInput.trim()}
+                      onClick={() => {
+                        if (competitorInput.trim() && !competitors.includes(competitorInput.trim())) {
+                          setCompetitors((prev) => [...prev, competitorInput.trim()]);
+                        }
+                        setCompetitorInput("");
+                      }}
+                    >
+                      Add
+                    </button>
                   </div>
-                  {intakeText.trim() && (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--color-border)" }}>
-                      <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", marginBottom: 4 }}>Your words</div>
-                      <div style={{ color: "var(--color-fg-secondary)", fontStyle: "italic", lineHeight: 1.4 }}>&quot;{intakeText.trim().slice(0, 200)}{intakeText.trim().length > 200 ? "…" : ""}&quot;</div>
+                  {competitors.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                      {competitors.map((c) => (
+                        <RemovablePill key={c} label={c} onRemove={() => setCompetitors((prev) => prev.filter((x) => x !== c))} />
+                      ))}
                     </div>
                   )}
-                </div>
-              )}
+                </FormField>
 
-              {resolved.length === 0 && intakeText.trim() && (
-                <div style={{ marginTop: 12 }}>
-                  <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", marginBottom: 4 }}>Your description</div>
-                  <div style={{ color: "var(--color-fg-secondary)", fontStyle: "italic", lineHeight: 1.4 }}>&quot;{intakeText.trim().slice(0, 200)}{intakeText.trim().length > 200 ? "…" : ""}&quot;</div>
-                  <p style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", marginTop: 8 }}>We&apos;ll still use this text to improve relevance in your feed and digests.</p>
-                </div>
-              )}
-            </div>
+                <FormField label="Anything else?" hint="Optional notes about what you need">
+                  <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. I'm focused on upcoming 510(k) submissions for our new cardiac device line..." rows={3} style={{ resize: "vertical", minHeight: 80 }} />
+                </FormField>
+              </div>
 
-            <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 20 }}>
-              Next: we&apos;ll create your profile, send your first digest to <strong>{email}</strong>, and open your personalized feed.
-            </p>
-            {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--text-sm)", marginBottom: 12 }}>{error}</p>}
-            {showEmailError && (
-              <p style={{ marginBottom: 12 }}>
-                <button type="button" className="btn btn-primary btn-md" onClick={() => router.push("/feed")}>
-                  Continue to my feed
-                </button>
+              <button type="button" className="btn btn-primary btn-lg" onClick={goNext} style={{ width: "100%" }}>
+                Review profile
+              </button>
+            </>
+          )}
+
+          {/* ─── Step: Confirm ─── */}
+          {step === "confirm" && (
+            <>
+              <StepHeader title="Your profile" subtitle="Confirm the details below, then we'll create your personalized feed and send your first digest." onBack={goBack} />
+
+              <div style={{
+                background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-lg)", padding: 20, marginBottom: 24, fontSize: "var(--text-sm)",
+              }}>
+                <ProfileSection label="You">
+                  <div style={{ color: "var(--color-fg)" }}><strong>{name}</strong></div>
+                  <div style={{ color: "var(--color-fg-secondary)" }}>{email}</div>
+                  {role && <div style={{ color: "var(--color-fg-muted)", marginTop: 4 }}>{role}{organization ? ` at ${organization}` : ""}</div>}
+                </ProfileSection>
+
+                {regions.length > 0 && (
+                  <ProfileSection label="Markets">
+                    <PillList items={regions} />
+                  </ProfileSection>
+                )}
+
+                {domains.length > 0 && (
+                  <ProfileSection label="Focus">
+                    <PillList items={domains.map((d) => d === "pharma" ? "Pharma & Biologics" : d === "devices" ? "Medical Devices" : d)} />
+                  </ProfileSection>
+                )}
+
+                {therapeuticAreas.length > 0 && (
+                  <ProfileSection label="Therapeutic areas">
+                    <PillList items={therapeuticAreas} />
+                  </ProfileSection>
+                )}
+
+                {ownProducts.length > 0 && (
+                  <ProfileSection label="Your products">
+                    {ownProducts.map((p) => (
+                      <div key={p.name} style={{ marginBottom: 4 }}>
+                        <strong style={{ color: "var(--color-fg)" }}>{p.name}</strong>
+                        {p.company && <span style={{ color: "var(--color-fg-muted)" }}> — {p.company}</span>}
+                        {p.regulatory_id && <span style={{ color: "var(--color-fg-muted)" }}> ({p.regulatory_id})</span>}
+                      </div>
+                    ))}
+                  </ProfileSection>
+                )}
+
+                {competitorProducts.length > 0 && (
+                  <ProfileSection label="Competitor products">
+                    {competitorProducts.map((p) => (
+                      <div key={p.name} style={{ marginBottom: 4 }}>
+                        <strong style={{ color: "var(--color-fg)" }}>{p.name}</strong>
+                        {p.company && <span style={{ color: "var(--color-fg-muted)" }}> — {p.company}</span>}
+                      </div>
+                    ))}
+                  </ProfileSection>
+                )}
+
+                {competitors.length > 0 && (
+                  <ProfileSection label="Competitor companies">
+                    <PillList items={competitors} />
+                  </ProfileSection>
+                )}
+
+                {frameworks.length > 0 && (
+                  <ProfileSection label="Regulatory frameworks">
+                    <PillList items={frameworks} />
+                  </ProfileSection>
+                )}
+
+                <ProfileSection label="Digest email">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 6 }}>Frequency</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {DIGEST_CADENCE_OPTIONS.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setDigestCadence(c.id)}
+                            style={{
+                              padding: "8px 14px",
+                              borderRadius: "var(--radius-md)",
+                              border: `1px solid ${digestCadence === c.id ? "var(--color-primary)" : "var(--color-border)"}`,
+                              background: digestCadence === c.id ? "var(--color-primary-subtle)" : "var(--color-surface-raised)",
+                              color: digestCadence === c.id ? "var(--color-primary)" : "var(--color-fg-secondary)",
+                              fontSize: "var(--text-sm)",
+                              fontFamily: "var(--font-sans)",
+                              cursor: "pointer",
+                              fontWeight: digestCadence === c.id ? 600 : 400,
+                              textAlign: "left",
+                            }}
+                          >
+                            <div>{c.label}</div>
+                            <div style={{ fontSize: 10, opacity: 0.8, marginTop: 1 }}>{c.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 6 }}>Send at</div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {DIGEST_HOUR_OPTIONS.map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setDigestSendHour(h)}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "var(--radius-md)",
+                              border: `1px solid ${digestSendHour === h ? "var(--color-primary)" : "var(--color-border)"}`,
+                              background: digestSendHour === h ? "var(--color-primary-subtle)" : "var(--color-surface-raised)",
+                              color: digestSendHour === h ? "var(--color-primary)" : "var(--color-fg-secondary)",
+                              fontSize: "var(--text-sm)",
+                              fontFamily: "var(--font-sans)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {h === 0 ? "12am" : h === 12 ? "12pm" : h < 12 ? `${h}am` : `${h - 12}pm`}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 4 }}>Timezone</div>
+                        <select
+                          value={timezone}
+                          onChange={(e) => setTimezone(e.target.value)}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "var(--radius-md)",
+                            border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-raised)",
+                            color: "var(--color-fg)",
+                            fontSize: "var(--text-sm)",
+                            fontFamily: "var(--font-sans)",
+                            minWidth: 160,
+                          }}
+                        >
+                          {TIMEZONE_OPTIONS.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </ProfileSection>
+              </div>
+
+              <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 16 }}>
+                We&apos;ll send your first digest to <strong>{email}</strong> and open your personalized feed.
               </p>
-            )}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-secondary btn-md" onClick={goBack} disabled={showEmailError}>Back to edit</button>
+
+              {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--text-sm)", marginBottom: 12 }}>{error}</p>}
+              {showEmailError && (
+                <p style={{ marginBottom: 12 }}>
+                  <button type="button" className="btn btn-primary btn-md" onClick={() => router.push("/feed")}>
+                    Continue to my feed
+                  </button>
+                </p>
+              )}
+
               <button
                 type="button"
                 className="btn btn-primary btn-lg"
-                disabled={!canCreateProfile || loadingSubmit || sendingDigest || showEmailError}
+                disabled={submitting || sendingDigest || showEmailError}
                 onClick={finalizeProfile}
+                style={{ width: "100%" }}
               >
-                {loadingSubmit ? "Creating profile…" : sendingDigest ? "Sending your first digest…" : "Yes, this is my profile"}
+                {submitting ? "Creating profile\u2026" : sendingDigest ? "Sending first digest\u2026" : "Create my profile"}
               </button>
-            </div>
-          </>
-        )}
+            </>
+          )}
 
-        <p style={{ marginTop: 32, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)" }}>
-          <Link href="/" style={{ color: "var(--color-fg-muted)", textDecoration: "underline" }}>Back to home</Link>
-        </p>
+          {step === "identity" && null}
+          {step !== "identity" && step !== "confirm" && (
+            <p style={{ marginTop: 24, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", textAlign: "center" }}>
+              <Link href="/" style={{ color: "var(--color-fg-muted)", textDecoration: "underline" }}>Back to home</Link>
+            </p>
+          )}
+          {step === "confirm" && (
+            <p style={{ marginTop: 24, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", textAlign: "center" }}>
+              <Link href="/" style={{ color: "var(--color-fg-muted)", textDecoration: "underline" }}>Back to home</Link>
+            </p>
+          )}
+        </div>
       </div>
     </main>
   );
+}
+
+// ─── Helper components ──────────────────────────────────────────────
+
+function BackLink() {
+  return (
+    <p style={{ marginTop: 24, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", textAlign: "center" }}>
+      <Link href="/" style={{ color: "var(--color-fg-muted)", textDecoration: "underline" }}>Back to home</Link>
+    </p>
+  );
+}
+
+function StepHeader({ title, subtitle, onBack }: { title: string; subtitle: string; onBack: () => void }) {
+  return (
+    <>
+      <button type="button" onClick={onBack} style={{
+        background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16,
+        display: "flex", alignItems: "center", gap: 6, color: "var(--color-fg-muted)", fontSize: "var(--text-sm)",
+        fontFamily: "var(--font-sans)",
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+        Back
+      </button>
+      <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
+        {title}
+      </h2>
+      <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: 1.6, marginBottom: 24 }}>
+        {subtitle}
+      </p>
+    </>
+  );
+}
+
+function FormField({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, display: "block" }}>
+        {label}{required && <span style={{ color: "var(--color-danger)" }}> *</span>}
+      </label>
+      {hint && <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 6, opacity: 0.7 }}>{hint}</p>}
+      {children}
+    </div>
+  );
+}
+
+function ToggleChips({ items, labels, selected, onToggle }: { items: string[]; labels?: Record<string, string>; selected: string[]; onToggle: (item: string) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {items.map((item) => {
+        const isSelected = selected.includes(item);
+        return (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onToggle(item)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "var(--radius-md)",
+              border: `1px solid ${isSelected ? "var(--color-primary)" : "var(--color-border)"}`,
+              background: isSelected ? "var(--color-primary-subtle)" : "var(--color-surface)",
+              color: isSelected ? "var(--color-primary)" : "var(--color-fg-secondary)",
+              fontSize: "var(--text-sm)",
+              fontFamily: "var(--font-sans)",
+              cursor: "pointer",
+              fontWeight: isSelected ? 600 : 400,
+              transition: "all 0.15s ease",
+            }}
+          >
+            {labels?.[item] || item}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProfileSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ color: "var(--color-fg-muted)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function PillList({ items }: { items: string[] }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {items.map((item) => (
+        <span key={item} style={{ padding: "4px 10px", background: "var(--color-surface-raised)", borderRadius: "var(--radius-md)", color: "var(--color-fg)", fontSize: "var(--text-sm)" }}>
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function RemovablePill({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span style={{
+      padding: "4px 8px 4px 10px", background: "var(--color-surface-raised)", borderRadius: "var(--radius-md)",
+      color: "var(--color-fg)", fontSize: "var(--text-sm)", display: "inline-flex", alignItems: "center", gap: 4,
+    }}>
+      {label}
+      <button type="button" onClick={onRemove} style={{
+        background: "none", border: "none", cursor: "pointer", padding: 0, color: "var(--color-fg-muted)",
+        display: "flex", alignItems: "center",
+      }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
+// ─── Product search component ───────────────────────────────────────
+
+function ProductSearch({
+  domain,
+  selected,
+  onAdd,
+  onRemove,
+}: {
+  domain: "pharma" | "devices" | "both";
+  selected: ProductInfo[];
+  onAdd: (product: ProductInfo) => void;
+  onRemove: (name: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ProductSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowResults(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const search = useCallback(async (q: string) => {
+    if (q.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(`/api/products/search?q=${encodeURIComponent(q)}&domain=${domain}`);
+      const data = await res.json();
+      setResults(data.results || []);
+      setShowResults(true);
+    } catch {
+      setResults([]);
+    }
+    setSearching(false);
+  }, [domain]);
+
+  function handleInput(value: string) {
+    setQuery(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => search(value), 300);
+  }
+
+  function addCustomProduct() {
+    if (!query.trim()) return;
+    const product: ProductInfo = {
+      name: query.trim(),
+      product_type: "unknown",
+      domain: domain === "both" ? "pharma" : domain,
+    };
+    onAdd(product);
+    setQuery("");
+    setResults([]);
+    setShowResults(false);
+  }
+
+  const selectedNames = new Set(selected.map((p) => p.name));
+
+  return (
+    <div ref={containerRef} style={{ position: "relative" }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          className="input"
+          value={query}
+          onChange={(e) => handleInput(e.target.value)}
+          onFocus={() => results.length > 0 && setShowResults(true)}
+          placeholder="Search by product name..."
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (results.length > 0) {
+                const first = results.find((r) => !selectedNames.has(r.name));
+                if (first) {
+                  onAdd({
+                    name: first.name,
+                    generic_name: first.generic_name,
+                    company: first.company,
+                    product_type: first.product_type,
+                    domain: first.domain,
+                    region: first.region,
+                    regulatory_id: first.regulatory_id,
+                    source: first.source,
+                  });
+                  setQuery("");
+                  setResults([]);
+                  setShowResults(false);
+                }
+              } else {
+                addCustomProduct();
+              }
+            }
+          }}
+        />
+        <button type="button" className="btn btn-secondary btn-md" disabled={!query.trim()} onClick={addCustomProduct}>
+          Add
+        </button>
+      </div>
+
+      {searching && <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginTop: 4 }}>Searching...</div>}
+
+      {showResults && results.length > 0 && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 50,
+          background: "var(--color-surface)", border: "1px solid var(--color-border)",
+          borderRadius: "var(--radius-lg)", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          maxHeight: 240, overflowY: "auto",
+        }}>
+          {results.slice(0, 8).map((r) => {
+            const alreadySelected = selectedNames.has(r.name);
+            return (
+              <button
+                key={`${r.name}-${r.regulatory_id || r.source}`}
+                type="button"
+                disabled={alreadySelected}
+                onClick={() => {
+                  onAdd({
+                    name: r.name,
+                    generic_name: r.generic_name,
+                    company: r.company,
+                    product_type: r.product_type,
+                    domain: r.domain,
+                    region: r.region,
+                    regulatory_id: r.regulatory_id,
+                    source: r.source,
+                  });
+                  setQuery("");
+                  setResults([]);
+                  setShowResults(false);
+                }}
+                style={{
+                  display: "block", width: "100%", textAlign: "left", padding: "10px 14px",
+                  background: "none", border: "none", borderBottom: "1px solid var(--color-border)",
+                  cursor: alreadySelected ? "default" : "pointer", fontFamily: "var(--font-sans)",
+                  opacity: alreadySelected ? 0.4 : 1,
+                }}
+              >
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--color-fg)", fontWeight: 500 }}>{r.name}</div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginTop: 2 }}>
+                  {[r.company, r.product_type, r.regulatory_id].filter(Boolean).join(" \u00B7 ")}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {selected.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+          {selected.map((p) => (
+            <RemovablePill key={p.name} label={p.name} onRemove={() => onRemove(p.name)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────
+
+function toggleArray(arr: string[], setter: (fn: (prev: string[]) => string[]) => void, item: string) {
+  setter((prev) => prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item]);
 }

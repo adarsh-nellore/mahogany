@@ -20,6 +20,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages";
 import { Profile, Signal } from "./types";
 import { query } from "./db";
+import { getDerivedProfileArrays } from "./profileUtils";
 import { searchProfileEvidence, comparativeAlerts } from "./profileSearchAgent";
 import { isValidSourceUrl } from "./sourceUrl";
 import { findSimilarSignals, rankSignalsForProfile } from "./embeddings";
@@ -306,16 +307,145 @@ async function handleSearchSignalsSemantic(
   }
 }
 
-// ─── Agent Loop ──────────────────────────────────────────────────────
+// ─── AI-generated digest header (title + summary) ────────────────────────────
 
-const MAX_TURNS = 12;
+async function generateDigestHeader(
+  sectionNames: string[],
+  headlines: string[],
+  domainContext: string
+): Promise<{ title: string; summary: string }> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return {
+      title: "Regulatory Intelligence Digest",
+      summary: "",
+    };
+  }
+  try {
+    const response = await getAnthropic().messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 256,
+      messages: [
+        {
+          role: "user",
+          content: `Given this digest's section topics and headlines, generate:
+1. A catchy, specific email subject/title (6-12 words, no quotation marks). Examples: "FDA Recall Surge & Import Oversight Updates", "Cardiac Device Approvals & EU Standards Shifts"
+2. A 2-3 sentence summary explaining what's in this digest for a ${domainContext} professional. Be specific about the themes. Keep it concise (2-4 lines).
+
+Sections: ${sectionNames.slice(0, 8).join("; ")}
+Sample headlines: ${headlines.slice(0, 6).join("; ")}
+
+Respond in this exact format:
+TITLE: <your title here>
+SUMMARY: <your 2-3 sentence summary here>`,
+        },
+      ],
+    });
+    const text = (response.content as { type: string; text?: string }[])[0]?.text || "";
+    const titleMatch = text.match(/TITLE:\s*(.+?)(?:\n|SUMMARY|$)/is);
+    const summaryMatch = text.match(/SUMMARY:\s*(.+?)$/is);
+    const title = titleMatch?.[1]?.trim()?.replace(/^["']|["']$/g, "") || "Regulatory Intelligence Digest";
+    const summary = summaryMatch?.[1]?.trim()?.replace(/\s+/g, " ") || "";
+    return { title, summary };
+  } catch (err) {
+    console.warn("[digest] header generation failed:", err);
+    return { title: "Regulatory Intelligence Digest", summary: "" };
+  }
+}
+
+// ─── Simple path: feed_stories → digest (same as feed, synthesized for email) ──
+
+async function buildDigestFromFeedStories(profile: Profile): Promise<string | null> {
+  const stories = await query<{
+    section: string;
+    severity: string;
+    headline: string;
+    summary: string;
+    body: string;
+    source_urls: string[];
+    source_labels: string[];
+    published_at: string;
+    relevance_reason?: string | null;
+  }>(
+    `SELECT section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
+     FROM feed_stories
+     WHERE (profile_id = $1 OR is_global = true)
+     ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
+     LIMIT 35`,
+    [profile.id]
+  );
+
+  if (stories.length === 0) return null;
+
+  const sections = new Map<string, typeof stories>();
+  for (const s of stories) {
+    const sec = s.section || "Regulatory Updates";
+    if (!sections.has(sec)) sections.set(sec, []);
+    sections.get(sec)!.push(s);
+  }
+  const sectionNames = Array.from(sections.keys());
+  const headlines = stories.slice(0, 10).map((s) => s.headline);
+
+  const { title, summary } = await generateDigestHeader(
+    sectionNames,
+    headlines,
+    domainLabel(profile)
+  );
+
+  const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
+  const parts: string[] = [];
+  for (const [section, items] of sections) {
+    const sev = items[0]?.severity || "medium";
+    const sectionTitle = section.toUpperCase().replace(/\s+/g, " ");
+    parts.push(`\n${sectionTitle} — ${severityEmoji[sev.toLowerCase()] || "🟡 MEDIUM"}\n\n`);
+    for (const item of items) {
+      const itemSummary = item.summary || item.body?.slice(0, 400) || "";
+      const why = item.relevance_reason ? `\n\nWhy this surfaced: ${item.relevance_reason}` : "";
+      const label = item.source_labels?.[0] || "Source";
+      const dateStr = item.published_at
+        ? (typeof item.published_at === "string" ? item.published_at.slice(0, 10) : new Date(item.published_at).toISOString().slice(0, 10))
+        : new Date().toISOString().slice(0, 10);
+      const sourceLine = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
+        ? `\n\n${dateStr} · ${label} · [${label}](${item.source_urls[0]})`
+        : "";
+      parts.push(`**${item.headline}**\n\n${itemSummary}${why}${sourceLine}\n\n`);
+    }
+  }
+
+  const body = parts.join("");
+  const header = summary
+    ? `${title}\n\n${summary}\n\n`
+    : `${title}\n\n`;
+  return header + body;
+}
+
+// ─── Agent Loop (COMMENTED OUT: was over-engineered, caused fallback) ─────────
+// Kept for potential future use. Previously: 12-turn research loop with tools.
+// const MAX_TURNS = 12;
 
 export async function runDigestAgent(
   profile: Profile,
   signals: Signal[]
 ): Promise<string> {
+  // NEW: Simple path — digest = feed stories, synthesized for email (matches feed quality)
+  const fromFeed = await buildDigestFromFeedStories(profile);
+  if (fromFeed) {
+    console.log(`[digest] using feed_stories for ${profile.name} (simple path)`);
+    return fromFeed;
+  }
+
+  // OLD: Multi-turn agent with research tools — COMMENTED OUT
+  // Uncomment to restore heavy research workflow (get_profile_evidence, fetch_source_page, etc.)
+  /*
   const client = getAnthropic();
-  const evidence = await searchProfileEvidence(profile.id, 20).catch(() => []);
+  const [evidence, derived] = await Promise.all([
+    searchProfileEvidence(profile.id, 20).catch(() => []),
+    getDerivedProfileArrays(profile.id),
+  ]);
+  const profileWithDerived: Profile = {
+    ...profile,
+    tracked_products: derived.tracked_products,
+    competitors: derived.competitors,
+  };
 
   // Semantically rank signals by profile interest if embeddings are available
   let rankedSignals = signals;
@@ -356,8 +486,8 @@ export async function runDigestAgent(
     )
     .join("\n\n");
 
-  const profileContext = buildProfileContext(profile);
-  const digestFormat = buildDigestFormatInstructions(profile);
+  const profileContext = buildProfileContext(profileWithDerived);
+  const digestFormat = buildDigestFormatInstructions(profileWithDerived);
 
   const evidenceContext = evidence.length
     ? `\nPROFILE MATCH CONTEXT:\n${evidence
@@ -429,7 +559,7 @@ ${digestFormat}`;
     // If no tool calls and stop reason is "end_turn", Claude finished without finalize
     if (toolUses.length === 0 && response.stop_reason === "end_turn") {
       console.log("[agent] Claude ended without calling finalize_digest, using text output");
-      return textParts.join("\n") || fallbackDigest(profile, signals);
+      return textParts.join("\n") || (await fallbackDigest(profile, signals));
     }
 
     // Process tool calls
@@ -519,7 +649,12 @@ ${digestFormat}`;
     messages.push({ role: "user", content: toolResults as ContentBlockParam[] });
   }
 
-  console.log("[agent] hit max turns, generating fallback");
+  console.log("[agent] hit max turns, using feed_stories fallback");
+  return await fallbackDigest(profile, signals);
+  */
+
+  // No feed_stories — use raw signals fallback
+  console.log(`[digest] no feed_stories for ${profile.name}, using raw signals fallback`);
   return fallbackDigest(profile, signals);
 }
 
@@ -588,11 +723,14 @@ Then: thematic sections covering ALL signals.
 SECTION HEADERS: ALL CAPS, SPECIFIC (name products/companies/regulations), followed by severity badge:
 MEDLINE CATHETER CONTAMINATION — CARDIAC DEVICE SUPPLY CHAIN AT RISK — 🔴 HIGH
 
-SIGNAL ENTRIES — two paragraphs (plus optional relevance line):
+SIGNAL ENTRIES — two paragraphs plus a relevance line:
 
 Paragraph 1: **Bold headline** — analysis with WHY this matters to this specific user. Use details from your source page research when available.
 
-When the item matches the user's watchlist (products, codes, competitors), add on its own line:
+REQUIRED for EVERY entry — add on its own line in italics:
+*Why this matters: [one sentence explaining why this is relevant to this user — reference their tracked products, device class, advisory committee, therapeutic areas, regulatory frameworks, or role by name]*
+
+For watchlist-matched items, also add the match type:
 Why this surfaced: exact code match
 (or: same_product_family | competitor_equivalent | same_ta_regulatory_pathway — use the reason codes from get_profile_evidence/get_comparative_alerts)
 
@@ -605,7 +743,8 @@ Then 1–2 paragraph entries for those items, with "Why this surfaced: competito
 
 RULES:
 - Cover ALL signals. Group related ones.
-- For watchlist-matched items, always include a "Why this surfaced: ..." line so the email shows relevance.
+- EVERY entry MUST have a "*Why this matters:*" line explaining relevance to this user. No exceptions. Reference their products, device class, regulatory frameworks, or role. Generic reasons like "relevant to your work" are not acceptable — be specific.
+- For watchlist-matched items, also include a "Why this surfaced: ..." line with the reason code.
 - Section headers must be SPECIFIC, never generic.
 - Every entry needs a clickable [link](url).
 - Always use the signal's published_at (evidence date) as YYYY-MM-DD at the start of each source line — that is when the source was published, not today.
@@ -638,15 +777,103 @@ function fmtEvidenceDate(iso: string): string {
   }
 }
 
-function fallbackDigest(profile: Profile, signals: Signal[]): string {
-  const items = signals
-    .slice(0, 20)
-    .map((s) => {
-      const sourcePart = isValidSourceUrl(s.url) ? ` · [Source](${s.url})` : "";
-      const evidenceDate = fmtEvidenceDate(s.published_at);
-      return `**${s.title}** — ${s.summary}\n${evidenceDate} · ${s.authority} · ${s.source_id}${sourcePart}`;
-    })
-    .join("\n\n");
+/**
+ * Build digest from feed_stories when available — matches feed quality.
+ * Falls back to raw signals only when no curated stories exist.
+ */
+async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<string> {
+  // Prefer feed_stories (curated) over raw signal dump
+  const stories = await query<{
+    section: string;
+    severity: string;
+    headline: string;
+    summary: string;
+    body: string;
+    source_urls: string[];
+    source_labels: string[];
+    published_at: string;
+    relevance_reason?: string | null;
+  }>(
+    `SELECT section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
+     FROM feed_stories
+     WHERE (profile_id = $1 OR is_global = true)
+     ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
+     LIMIT 35`,
+    [profile.id]
+  );
 
-  return `${profile.regions.join("/")} ${domainLabel(profile)} Regulatory Intelligence Digest – ${fmtDate(new Date())}\n\nAutomated fallback — agent research unavailable.\n\n${items}\n`;
+  if (stories.length > 0) {
+    const sections = new Map<string, typeof stories>();
+    for (const s of stories) {
+      const sec = s.section || "Regulatory Updates";
+      if (!sections.has(sec)) sections.set(sec, []);
+      sections.get(sec)!.push(s);
+    }
+    const sectionNames = Array.from(sections.keys());
+    const headlines = stories.slice(0, 10).map((s) => s.headline);
+    const { title, summary } = await generateDigestHeader(
+      sectionNames,
+      headlines,
+      domainLabel(profile)
+    );
+
+    const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
+    const parts: string[] = [];
+    for (const [section, items] of sections) {
+      const sev = items[0]?.severity || "medium";
+      const sectionTitle = section.toUpperCase().replace(/\s+/g, " ");
+      parts.push(`\n${sectionTitle} — ${severityEmoji[sev.toLowerCase()] || "🟡 MEDIUM"}\n\n`);
+      for (const item of items) {
+        const itemSummary = item.summary || item.body?.slice(0, 400) || "";
+        const why = item.relevance_reason ? `\n\nWhy this surfaced: ${item.relevance_reason}` : "";
+        const label = item.source_labels?.[0] || "Source";
+        const dateStr = item.published_at
+          ? (typeof item.published_at === "string" ? item.published_at.slice(0, 10) : new Date(item.published_at).toISOString().slice(0, 10))
+          : new Date().toISOString().slice(0, 10);
+        const sourceLine = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
+          ? `\n\n${dateStr} · ${label} · [${label}](${item.source_urls[0]})`
+          : "";
+        parts.push(`**${item.headline}**\n\n${itemSummary}${why}${sourceLine}\n\n`);
+      }
+    }
+    const body = parts.join("");
+    const header = summary
+      ? `${title}\n\n${summary}\n\n`
+      : `${title}\n\n`;
+    return header + body;
+  }
+
+  // No feed stories — use raw signals with cleaner formatting
+  const byType = new Map<string, Signal[]>();
+  for (const s of signals.slice(0, 25)) {
+    const key = (s.impact_type || s.domains?.[0] || "Updates").toString().toUpperCase().replace(/\s+/g, " ");
+    if (!byType.has(key)) byType.set(key, []);
+    byType.get(key)!.push(s);
+  }
+  const sectionNames = Array.from(byType.keys());
+  const headlines = signals.slice(0, 10).map((s) => s.title);
+  const { title, summary } = await generateDigestHeader(
+    sectionNames,
+    headlines,
+    domainLabel(profile)
+  );
+
+  const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
+  const parts: string[] = [];
+  for (const [section, sigs] of byType) {
+    const sev = sigs[0]?.impact_severity || "medium";
+    parts.push(`\n${section} — ${severityEmoji[sev.toLowerCase()] || "🟡 MEDIUM"}\n\n`);
+    for (const s of sigs.slice(0, 8)) {
+      const evidenceDate = fmtEvidenceDate(s.published_at);
+      const sourcePart = isValidSourceUrl(s.url)
+        ? `\n\n${evidenceDate} · ${s.authority} · [${s.authority}](${s.url})`
+        : `\n\n${evidenceDate} · ${s.authority} · ${s.source_id}`;
+      parts.push(`**${s.title}**\n\n${s.summary}${sourcePart}\n\n`);
+    }
+  }
+  const body = parts.join("");
+  const intro = summary
+    ? `${title}\n\n${summary}\n\n`
+    : `${title}\n\n`;
+  return intro + "Recent signals from your feed:\n\n" + body;
 }

@@ -61,6 +61,28 @@ export async function POST(
       return NextResponse.json({ error: "Already tracking this item" }, { status: 409 });
     }
 
+    // Sync profiles.tracked_products/competitors with watch items
+    const entities = await query<{ canonical_name: string; entity_type: string }>(
+      `SELECT canonical_name, entity_type FROM entities WHERE id = $1`,
+      [entity_id]
+    );
+    if (entities.length > 0 && entities[0].canonical_name) {
+      const name = entities[0].canonical_name;
+      if (watch_type === "exact") {
+        await query(
+          `UPDATE profiles SET tracked_products = array_append(tracked_products, $2), updated_at = now()
+           WHERE id = $1 AND NOT ($2 = ANY(tracked_products))`,
+          [profileId, name]
+        );
+      } else if (watch_type === "competitor") {
+        await query(
+          `UPDATE profiles SET competitors = array_append(competitors, $2), updated_at = now()
+           WHERE id = $1 AND NOT ($2 = ANY(competitors))`,
+          [profileId, name]
+        );
+      }
+    }
+
     // Return the full item
     const items = await query<{
       id: string; entity_id: string; canonical_name: string; entity_type: string;
@@ -79,5 +101,26 @@ export async function POST(
     return NextResponse.json({ item: items[0] });
   } catch (err) {
     return NextResponse.json({ error: "Failed to add watch item", details: String(err) }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE all watch items for a profile. Clears the watch list and syncs
+ * tracked_products/competitors so we only show what the user actually cares about.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: profileId } = await params;
+  try {
+    await query(`DELETE FROM profile_watch_items WHERE profile_id = $1`, [profileId]);
+    await query(
+      `UPDATE profiles SET tracked_products = '{}', competitors = '{}', updated_at = now() WHERE id = $1`,
+      [profileId]
+    );
+    return NextResponse.json({ ok: true, message: "Watch list cleared" });
+  } catch (err) {
+    return NextResponse.json({ error: "Failed to clear watch list", details: String(err) }, { status: 500 });
   }
 }

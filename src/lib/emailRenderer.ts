@@ -2,8 +2,8 @@
  * Converts a structured digest text into a Substack-style HTML email.
  *
  * Expected input format from the summarizer:
- * - Line 1: subtitle (region/domain context line)
- * - Line 3+: executive summary paragraph
+ * - Line 1: AI-generated digest title (used for masthead and email subject)
+ * - Line 3+: 2-3 sentence executive summary explaining what's below
  * - Sections: ALL CAPS HEADLINE — 🔴 HIGH / 🟡 MEDIUM / 🟢 LOW
  * - Signal entries: **bold headline** — analysis text
  * - Optional: "Why this surfaced: reason codes"
@@ -12,16 +12,25 @@
 
 import { isValidSourceUrl } from "./sourceUrl";
 
+/** Extract the digest title (first line) for use as email subject. */
+export function getDigestSubjectFromMarkdown(markdown: string): string {
+  const firstLine = markdown.split("\n").find((l) => l.trim());
+  return (
+    firstLine?.trim() ||
+    `RI Digest — ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+  );
+}
+
 export function renderDigestEmail(markdown: string): string {
   const lines = markdown.split("\n");
   const htmlParts: string[] = [];
 
-  let subtitle = "";
+  let title = "";
   let i = 0;
 
   while (i < lines.length && !lines[i].trim()) i++;
   if (i < lines.length) {
-    subtitle = lines[i].trim();
+    title = lines[i].trim();
     i++;
   }
 
@@ -35,7 +44,7 @@ export function renderDigestEmail(markdown: string): string {
 
   if (summaryLines.length > 0) {
     htmlParts.push(
-      `<p style="${font(16)}color:#374151;margin:0 0 28px 0;line-height:1.75;">${formatInline(summaryLines.join(" "))}</p>`
+      `<p style="${font(16)}color:#374151;margin:0 0 36px 0;line-height:1.8;">${formatInline(summaryLines.join(" "))}</p>`
     );
   }
 
@@ -56,9 +65,9 @@ export function renderDigestEmail(markdown: string): string {
               : "#9E3B1E";
 
       htmlParts.push(
-        `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:36px 0 18px 0;">
-          <tr><td style="padding:14px 0 10px 0;border-bottom:2px solid ${accentColor};">
-            <span style="${font(12)}font-weight:700;color:${accentColor};letter-spacing:1px;">${esc(title)}</span>
+        `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:48px 0 20px 0;">
+          <tr><td style="padding:16px 0 12px 0;border-bottom:2px solid ${accentColor};">
+            <span style="${font(13)}font-weight:700;color:${accentColor};letter-spacing:0.5px;text-transform:uppercase;">${esc(title)}</span>
           </td></tr>
         </table>`
       );
@@ -68,7 +77,7 @@ export function renderDigestEmail(markdown: string): string {
 
     if (trimmed.startsWith("**")) {
       htmlParts.push(
-        `<p style="${font(15)}color:#1f2937;margin:18px 0 4px 0;line-height:1.7;">${formatInline(trimmed)}</p>`
+        `<p style="${font(16)}font-weight:600;color:#111827;margin:28px 0 10px 0;line-height:1.6;">${formatInline(trimmed)}</p>`
       );
       i++;
       continue;
@@ -77,7 +86,7 @@ export function renderDigestEmail(markdown: string): string {
     if (isWhyThisSurfacedLine(trimmed)) {
       const reason = trimmed.replace(/^Why this surfaced:\s*/i, "").trim();
       htmlParts.push(
-        `<p style="${font(12)}color:#6b7280;margin:2px 0 8px 0;line-height:1.5;"><span style="font-weight:600;">Why this surfaced:</span> ${esc(reason)}</p>`
+        `<p style="${font(12)}color:#6b7280;margin:4px 0 12px 0;line-height:1.5;padding-left:12px;border-left:3px solid #e5e7eb;"><span style="font-weight:600;">Why this surfaced:</span> ${esc(reason)}</p>`
       );
       i++;
       continue;
@@ -85,14 +94,14 @@ export function renderDigestEmail(markdown: string): string {
 
     if (isSourceLine(trimmed)) {
       htmlParts.push(
-        `<p style="${font(12)}color:#9ca3af;margin:2px 0 22px 0;line-height:1.5;">${formatSourceLine(trimmed)}</p>`
+        `<p style="${font(12)}color:#9ca3af;margin:4px 0 32px 0;line-height:1.5;">${formatSourceLine(trimmed)}</p>`
       );
       i++;
       continue;
     }
 
     htmlParts.push(
-      `<p style="${font(15)}color:#374151;margin:8px 0;line-height:1.7;">${formatInline(trimmed)}</p>`
+      `<p style="${font(15)}color:#374151;margin:12px 0;line-height:1.75;">${formatInline(trimmed)}</p>`
     );
     i++;
   }
@@ -111,7 +120,7 @@ export function renderDigestEmail(markdown: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Regulatory Intelligence Digest</title>
+  <title>${esc(title || "Regulatory Intelligence Digest")}</title>
 </head>
 <body style="margin:0;padding:0;background:#f9fafb;-webkit-font-smoothing:antialiased;">
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f9fafb;">
@@ -121,8 +130,8 @@ export function renderDigestEmail(markdown: string): string {
 
 <!-- Masthead -->
 <tr><td style="padding:40px 40px 0 40px;">
-  <p style="margin:0 0 4px 0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#111827;letter-spacing:-0.5px;">Regulatory Intelligence Digest</p>
-  <p style="${font(14)}color:#6b7280;margin:0;">${esc(subtitle || dateStr)}</p>
+  <p style="margin:0 0 4px 0;font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:700;color:#111827;letter-spacing:-0.5px;line-height:1.3;">${esc(title || "Regulatory Intelligence Digest")}</p>
+  <p style="${font(13)}color:#6b7280;margin:0;">${esc(dateStr)}</p>
 </td></tr>
 
 <!-- Divider -->
@@ -131,7 +140,7 @@ export function renderDigestEmail(markdown: string): string {
 </td></tr>
 
 <!-- Body -->
-<tr><td style="padding:24px 40px 32px 40px;">
+<tr><td style="padding:32px 40px 40px 40px;line-height:1.6;">
 ${bodyHtml}
 </td></tr>
 
@@ -161,7 +170,7 @@ function font(size: number): string {
 function isSectionHeader(line: string): boolean {
   if (!(line.includes("🔴") || line.includes("🟡") || line.includes("🟢"))) return false;
   const beforeBadge = line.split("—")[0]?.trim() || "";
-  return beforeBadge.length > 5 && beforeBadge === beforeBadge.toUpperCase();
+  return beforeBadge.length > 2;
 }
 
 function parseSectionHeader(line: string): {
@@ -172,7 +181,10 @@ function parseSectionHeader(line: string): {
     : line.includes("🟡") ? "medium" as const
       : line.includes("🟢") ? "low" as const
         : "unknown" as const;
-  return { title: line, severity };
+  const title = line.replace(/\s*—\s*🔴\s+HIGH\s*$/i, "")
+    .replace(/\s*—\s*🟡\s+MEDIUM\s*$/i, "")
+    .replace(/\s*—\s*🟢\s+LOW\s*$/i, "").trim();
+  return { title: title || line, severity };
 }
 
 function isWhyThisSurfacedLine(line: string): boolean {
@@ -180,12 +192,11 @@ function isWhyThisSurfacedLine(line: string): boolean {
 }
 
 function isSourceLine(line: string): boolean {
-  const parts = line.split("·");
-  if (parts.length < 3) return false;
   if (line.startsWith("**") || line.startsWith("#")) return false;
   const hasLink = /\[.+?\]\(https?:\/\/.+?\)/.test(line);
-  const looksLikeAttribution = /^[A-Z]/.test(line.trim()) && !line.startsWith("**");
-  return hasLink || (looksLikeAttribution && parts.length >= 3);
+  const hasDots = line.includes("·");
+  const looksLikeDate = /^\d{4}-\d{2}-\d{2}/.test(line.trim());
+  return (hasLink && hasDots) || (looksLikeDate && hasDots) || (hasLink && line.trim().length > 20);
 }
 
 function formatSourceLine(line: string): string {
