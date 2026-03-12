@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
+import { REGION_OPTIONS, PRODUCT_CODE_OPTIONS } from "@/lib/feedFilters";
 import Header from "@/components/Header";
 
 interface FeedStory {
@@ -30,6 +32,7 @@ interface Profile {
   therapeutic_areas: string[];
   product_types: string[];
   tracked_products: string[];
+  regulatory_frameworks?: string[];
 }
 
 interface WatchItem {
@@ -130,6 +133,50 @@ function storyIcon(_section: string): string {
   return "•";
 }
 
+function FilterChipRow({
+  label,
+  items,
+  labels,
+  active,
+  onToggle,
+  toKey,
+}: {
+  label: string;
+  items: string[];
+  labels?: Record<string, string>;
+  active: Set<string>;
+  onToggle: (key: string) => void;
+  toKey: (x: string) => string;
+}) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+      <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginRight: 4, flexShrink: 0 }}>{label}</span>
+      {items.map((item) => {
+        const key = toKey(item);
+        const isActive = active.has(key);
+        const display = labels?.[item] ?? item;
+        return (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onToggle(key)}
+            style={{
+              padding: "4px 10px", borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
+              background: isActive ? "var(--color-primary-subtle)" : "var(--color-surface)",
+              color: isActive ? "var(--color-primary)" : "var(--color-fg-muted)",
+              border: isActive ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+              fontFamily: "var(--font-sans)",
+            }}
+          >
+            {display}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function FeedPage() {
   const [stories, setStories] = useState<FeedStory[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -141,6 +188,13 @@ export default function FeedPage() {
   const [searchMode, setSearchMode] = useState<"idle" | "searching" | "results">("idle");
   const [searchAnswer, setSearchAnswer] = useState("");
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Filter chips: use chip state only when fetching — no profile fallback.
+  // Initialized from profile on load; deselecting all = broad feed for that dimension.
+  const [activeTAs, setActiveTAs] = useState<Set<string>>(new Set());
+  const [activeRegions, setActiveRegions] = useState<Set<string>>(new Set());
+  const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set());
+  const [activeProductCodes, setActiveProductCodes] = useState<Set<string>>(new Set());
 
   // Product filter state
   const [watchedProducts, setWatchedProducts] = useState<WatchItem[]>([]);
@@ -157,6 +211,17 @@ export default function FeedPage() {
       .then((p) => {
         if (!p) return;
         setProfile(p);
+        // Initialize filter chips from profile (defaults); user can override/deselect.
+        const profileTAs = (p.therapeutic_areas || []).map((t: string) => {
+          const low = t.toLowerCase().trim();
+          const match = THERAPEUTIC_AREAS.find((ta) => ta.toLowerCase() === low);
+          return match ? match.toLowerCase() : low;
+        });
+        setActiveTAs(new Set(profileTAs));
+        setActiveRegions(new Set(p.regions || []));
+        setActiveDomains(new Set(p.domains || []));
+        // Product codes: no profile field, so start empty; user can add
+        setActiveProductCodes(new Set());
         // Load product watch items
         fetch(`/api/profiles/${p.id}/watch-items`)
           .then((r) => r.json())
@@ -168,19 +233,25 @@ export default function FeedPage() {
       .catch(() => {});
   }, []);
 
+  const expandTA = useCallback((t: string): string[] => {
+    const low = t.toLowerCase().trim();
+    const out: string[] = [low];
+    if (low.includes("wound") || low.includes("dressing")) out.push("wound care");
+    if (low === "hematoma") out.push("hematology");
+    return out;
+  }, []);
+
   const fetchStories = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ per_page: "60" });
-    // Stateless for now: comment out default profile filter so we show all content
-    // if (profile?.domains?.length) {
-    //   params.set("domains", profile.domains.join(","));
-    // }
-    // if (profile?.regions?.length) {
-    //   params.set("regions", profile.regions.join(","));
-    // }
-    // if (profile?.therapeutic_areas?.length) {
-    //   params.set("therapeutic_areas", profile.therapeutic_areas.join(","));
-    // }
+    // Use chip state only — no profile fallback. Empty = no filter (broad).
+    if (activeRegions.size > 0) params.set("regions", [...activeRegions].join(","));
+    if (activeDomains.size > 0) params.set("domains", [...activeDomains].join(","));
+    if (activeTAs.size > 0) {
+      const tas = [...new Set([...activeTAs].flatMap(expandTA))];
+      params.set("therapeutic_areas", tas.join(","));
+    }
+    if (activeProductCodes.size > 0) params.set("product_codes", [...activeProductCodes].join(","));
     try {
       const res = await fetch(`/api/feed/stories?${params}`);
       const data = await res.json();
@@ -188,7 +259,7 @@ export default function FeedPage() {
       setTotal(data.total || 0);
     } catch { /* ignore */ }
     setLoading(false);
-  }, []); // Stateless: no profile deps
+  }, [activeRegions, activeDomains, activeTAs, activeProductCodes, expandTA]);
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
 
@@ -202,10 +273,17 @@ export default function FeedPage() {
     setSearchMode("searching");
     setLoading(true);
     try {
+      const tas = activeTAs.size > 0 ? [...new Set([...activeTAs].flatMap(expandTA))] : [];
       const res = await fetch("/api/feed/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: q.trim() }),
+        body: JSON.stringify({
+          q: q.trim(),
+          therapeutic_areas: tas,
+          regions: activeRegions.size > 0 ? [...activeRegions] : undefined,
+          domains: activeDomains.size > 0 ? [...activeDomains] : undefined,
+          product_codes: activeProductCodes.size > 0 ? [...activeProductCodes] : undefined,
+        }),
       });
       const data = await res.json();
       setStories(data.results || []);
@@ -216,7 +294,7 @@ export default function FeedPage() {
       setSearchMode("idle");
     }
     setLoading(false);
-  }, [fetchStories]);
+  }, [fetchStories, activeTAs, activeRegions, activeDomains, activeProductCodes, expandTA]);
 
   const handleSearchInputChange = (val: string) => {
     setSearchInput(val);
@@ -366,7 +444,7 @@ export default function FeedPage() {
 
         {/* ── Search bar — full width, prominent ── */}
         <form onSubmit={(e) => { e.preventDefault(); handleSemanticSearch(searchInput); }}
-          style={{ marginBottom: "var(--space-4)" }}>
+          style={{ marginBottom: "var(--space-3)" }}>
           <div style={{ position: "relative" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", opacity: 0.45, pointerEvents: "none" }}>
@@ -376,7 +454,7 @@ export default function FeedPage() {
               onChange={(e) => handleSearchInputChange(e.target.value)}
               placeholder="Search your briefing — ask anything..."
               style={{
-                width: "100%", fontSize: "var(--text-base)", padding: "12px 48px 12px 42px",
+                width: "100%", fontSize: "var(--text-base)", padding: "12px 100px 12px 42px",
                 fontFamily: "var(--font-sans)", color: "var(--color-fg)",
                 border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)",
                 background: "var(--color-surface)", outline: "none",
@@ -386,16 +464,120 @@ export default function FeedPage() {
               onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-border-focus)"; }}
               onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
             />
-            <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 6 }}>
-              {searchMode === "searching" && (
-                <span style={{ width: 16, height: 16, border: "2px solid var(--color-border)", borderTopColor: "var(--color-primary)", borderRadius: "50%", animation: "searchSpin 0.6s linear infinite", display: "block" }} />
+            <button
+              type="submit"
+              style={{
+                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "6px 12px", borderRadius: "var(--radius-md)",
+                background: "var(--color-fg)", color: "var(--color-fg-inverse)",
+                border: "none", cursor: "pointer",
+                fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "0.02em",
+              }}
+            >
+              {searchMode === "searching" ? (
+                <span style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "searchSpin 0.6s linear infinite" }} />
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
               )}
-              <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-placeholder)", fontFamily: "var(--font-sans)", fontWeight: 600, letterSpacing: "0.02em" }}>
-                AI Search
-              </span>
-            </div>
+              Search
+            </button>
           </div>
         </form>
+
+        {/* ── Filter chips: chip state overrides profile; deselect all = broad feed ── */}
+        {profile && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: "var(--space-4)" }}>
+            <FilterChipRow
+              label="Therapeutic areas"
+              items={[...THERAPEUTIC_AREAS]}
+              active={activeTAs}
+              onToggle={(key) => {
+                setActiveTAs((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                });
+                setTimeout(() => fetchStories(), 0);
+              }}
+              toKey={(x) => x.toLowerCase().trim()}
+            />
+            <FilterChipRow
+              label="Markets"
+              items={REGION_OPTIONS.map((r) => r.id)}
+              labels={Object.fromEntries(REGION_OPTIONS.map((r) => [r.id, r.label]))}
+              active={activeRegions}
+              onToggle={(key) => {
+                setActiveRegions((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                });
+                setTimeout(() => fetchStories(), 0);
+              }}
+              toKey={(x) => x}
+            />
+            <FilterChipRow
+              label="Domains"
+              items={["devices", "pharma"]}
+              labels={{ devices: "Medical Devices", pharma: "Pharma & Biologics" }}
+              active={activeDomains}
+              onToggle={(key) => {
+                setActiveDomains((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                });
+                setTimeout(() => fetchStories(), 0);
+              }}
+              toKey={(x) => x}
+            />
+            <FilterChipRow
+              label="Product codes"
+              items={[...PRODUCT_CODE_OPTIONS]}
+              active={activeProductCodes}
+              onToggle={(key) => {
+                setActiveProductCodes((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                });
+                setTimeout(() => fetchStories(), 0);
+              }}
+              toKey={(x) => x}
+            />
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const profileTAs = (profile.therapeutic_areas || []).map((t: string) => {
+                    const low = t.toLowerCase().trim();
+                    const match = THERAPEUTIC_AREAS.find((ta) => ta.toLowerCase() === low);
+                    return match ? match.toLowerCase() : low;
+                  });
+                  setActiveTAs(new Set(profileTAs));
+                  setActiveRegions(new Set(profile.regions || []));
+                  setActiveDomains(new Set(profile.domains || []));
+                  setActiveProductCodes(new Set());
+                  setTimeout(() => fetchStories(), 0);
+                }}
+                style={{
+                  fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)",
+                  color: "var(--color-fg-muted)", background: "none", border: "none", cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Reset to profile
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Product filter pills ── */}
         {watchedProducts.length > 0 && (
@@ -528,7 +710,7 @@ export default function FeedPage() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-5)" }}>
           <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", margin: 0 }}>
-            Briefing content is based on your saved profile settings.
+            Filters override profile when selected. Deselect all for a broader view. Changes here don&apos;t save to your profile.
           </p>
           {!loading && stories.length > 0 && (
             <span className="last-updated">

@@ -4,7 +4,7 @@ const ENDPOINT = "https://api.fda.gov/drug/drugsfda.json";
 
 export async function fetchOpenFDADrugsFDA(): Promise<SignalDraft[]> {
   try {
-    const res = await fetch(`${ENDPOINT}?limit=15&sort=submissions.submission_status_date:desc`, {
+    const res = await fetch(`${ENDPOINT}?limit=100&sort=submissions.submission_status_date:desc`, {
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {

@@ -9,7 +9,7 @@ export async function fetchFDANDC(): Promise<SignalDraft[]> {
   const sinceStr = since.toISOString().split("T")[0].replace(/-/g, "");
   const nowStr = now.toISOString().split("T")[0].replace(/-/g, "");
 
-  const url = `${ENDPOINT}?search=marketing_start_date:[${sinceStr}+TO+${nowStr}]&limit=10&sort=marketing_start_date:desc`;
+  const url = `${ENDPOINT}?search=marketing_start_date:[${sinceStr}+TO+${nowStr}]&limit=50&sort=marketing_start_date:desc`;
 
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });

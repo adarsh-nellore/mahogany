@@ -37,18 +37,7 @@ const DOMAINS = [
   { value: "devices", label: "Medical Devices" },
 ];
 
-const THERAPEUTIC_AREAS = [
-  "Oncology", "Cardiology", "Neurology", "Orthopedics", "Endocrinology",
-  "Immunology", "Dermatology", "Ophthalmology", "Gastroenterology",
-  "Pulmonology", "Hematology", "Nephrology", "Infectious Disease",
-  "Rare Disease", "Wound Care", "Dental", "SaMD", "Respiratory",
-  "Psychiatry", "Pediatrics", "Radiology",
-];
-
-const FRAMEWORKS = [
-  "510(k)", "PMA", "De Novo", "NDA", "BLA", "ANDA", "IND",
-  "MDR", "IVDR", "CE Marking", "PMDA", "TGA",
-];
+import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
 
 const DIGEST_CADENCE_OPTIONS = [
   { id: "daily" as const, label: "Daily", desc: "Every morning" },
@@ -94,7 +83,6 @@ export default function OnboardingPage() {
   const [regions, setRegions] = useState<string[]>([]);
   const [domains, setDomains] = useState<string[]>([]);
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>([]);
-  const [frameworks, setFrameworks] = useState<string[]>([]);
 
   // Digest schedule
   const [digestCadence, setDigestCadence] = useState<"daily" | "twice_weekly" | "weekly">("daily");
@@ -157,7 +145,7 @@ export default function OnboardingPage() {
             ...competitors,
             ...competitorProducts.map((p) => p.company || p.name),
           ],
-          regulatory_frameworks: frameworks,
+          regulatory_frameworks: [],
           analysis_preferences: notes ? `Notes: ${notes}` : "",
           digest_cadence: digestCadence,
           digest_send_hour: digestSendHour,
@@ -297,11 +285,7 @@ export default function OnboardingPage() {
                 </FormField>
 
                 <FormField label="Therapeutic areas">
-                  <ToggleChips items={THERAPEUTIC_AREAS} selected={therapeuticAreas} onToggle={(item) => toggleArray(therapeuticAreas, setTherapeuticAreas, item)} />
-                </FormField>
-
-                <FormField label="Regulatory frameworks">
-                  <ToggleChips items={FRAMEWORKS} selected={frameworks} onToggle={(item) => toggleArray(frameworks, setFrameworks, item)} />
+                  <ToggleChips items={[...THERAPEUTIC_AREAS]} selected={therapeuticAreas} onToggle={(item) => toggleArray(therapeuticAreas, setTherapeuticAreas, item)} />
                 </FormField>
               </div>
 
@@ -445,12 +429,6 @@ export default function OnboardingPage() {
                 {competitors.length > 0 && (
                   <ProfileSection label="Competitor companies">
                     <PillList items={competitors} />
-                  </ProfileSection>
-                )}
-
-                {frameworks.length > 0 && (
-                  <ProfileSection label="Regulatory frameworks">
-                    <PillList items={frameworks} />
                   </ProfileSection>
                 )}
 

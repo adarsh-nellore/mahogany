@@ -53,23 +53,12 @@ export default function Header() {
 
       <nav className="topbar-nav">
         <Link href="/feed" className={isActive("/feed") ? "active" : ""}>Feed</Link>
+        <Link href="/digest" className={isActive("/digest") ? "active" : ""}>Digest</Link>
       </nav>
 
       <div style={{ flex: 1 }} />
 
-      {/* Right side: Digests link + avatar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <Link href="/digest"
-          style={{
-            fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)", fontWeight: 500,
-            color: isActive("/digest") ? "var(--color-fg)" : "var(--color-fg-muted)",
-            textDecoration: "none",
-            transition: "color 0.15s ease",
-          }}>
-          Digests
-        </Link>
-
-        <div ref={menuRef} style={{ position: "relative" }}>
+      <div ref={menuRef} style={{ position: "relative" }}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Account menu"
@@ -103,7 +92,7 @@ export default function Header() {
               )}
 
               <div style={{ padding: "4px 0" }}>
-                <MenuLink href="/profile" label="Profile & Settings" active={isActive("/profile")} onClick={() => setMenuOpen(false)} />
+                <MenuLink href="/profile" label="Profile" active={isActive("/profile")} onClick={() => setMenuOpen(false)} />
               </div>
 
               <div style={{ borderTop: "1px solid var(--color-border)", padding: "4px 0" }}>
@@ -119,7 +108,6 @@ export default function Header() {
               </div>
             </div>
           )}
-        </div>
       </div>
     </header>
   );

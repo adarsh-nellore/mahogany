@@ -30,6 +30,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // For re-onboarding (same email): clear all derived/stale data so profile starts fresh
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM profiles WHERE email = $1 LIMIT 1`,
+      [body.email]
+    );
+    if (existing.length > 0) {
+      const pid = existing[0].id;
+      await query(`DELETE FROM profile_watch_items WHERE profile_id = $1`, [pid]);
+      await query(`DELETE FROM feed_stories WHERE profile_id = $1`, [pid]);
+      await query(`DELETE FROM profile_entity_interest WHERE profile_id = $1`, [pid]);
+      await query(`DELETE FROM profile_query_policies WHERE profile_id = $1`, [pid]);
+      await query(`DELETE FROM profile_focus WHERE profile_id = $1`, [pid]);
+      await query(`DELETE FROM intake_sessions WHERE profile_id = $1`, [pid]);
+      try {
+        await query(`DELETE FROM profile_interest_embeddings WHERE profile_id = $1`, [pid]);
+      } catch { /* table may not exist */ }
+    }
+
     const result = await query<{ id: string }>(
       `INSERT INTO profiles (
         email, name, regions, domains, therapeutic_areas,

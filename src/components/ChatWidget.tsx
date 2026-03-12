@@ -21,6 +21,7 @@ export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [initialSuggestions, setInitialSuggestions] = useState<string[] | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -33,6 +34,18 @@ export default function ChatWidget() {
   useEffect(() => {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 150);
   }, [open]);
+
+  useEffect(() => {
+    if (open && initialSuggestions === null) {
+      fetch("/api/chat/suggestions")
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.suggestions && Array.isArray(d.suggestions)) setInitialSuggestions(d.suggestions);
+          else setInitialSuggestions(defaultSuggestions);
+        })
+        .catch(() => setInitialSuggestions(defaultSuggestions));
+    }
+  }, [open, initialSuggestions]);
 
   const send = useCallback(async (text?: string) => {
     const q = (text ?? input).trim();
@@ -61,11 +74,12 @@ export default function ChatWidget() {
     setLoading(false);
   }, [input, loading, messages]);
 
-  const initialSuggestions = [
+  const defaultSuggestions = [
     "What are the biggest safety concerns today?",
-    "Summarize EU regulatory activity",
-    "Any updates relevant to oncology?",
+    "Summarize recent regulatory activity",
+    "Any guidance relevant to my focus?",
   ];
+  const displaySuggestions = initialSuggestions ?? defaultSuggestions;
 
   return (
     <>
@@ -121,7 +135,7 @@ export default function ChatWidget() {
               Mahogany AI
             </div>
           </div>
-          <button onClick={() => setOpen(false)} aria-label="Close"
+          <button onClick={() => { setOpen(false); setInitialSuggestions(null); }} aria-label="Close"
             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-fg-muted)", padding: 4, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-md)" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -146,7 +160,7 @@ export default function ChatWidget() {
                 </p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {initialSuggestions.map((s) => (
+                {displaySuggestions.map((s) => (
                   <button key={s} onClick={() => send(s)}
                     style={{
                       fontSize: "var(--text-xs)", fontFamily: "var(--font-sans)", color: "var(--color-fg-secondary)",

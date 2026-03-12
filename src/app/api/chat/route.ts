@@ -170,23 +170,24 @@ suggestion 1 text
 suggestion 2 text
 suggestion 3 text
 
-The suggestions should be natural follow-up questions the user might want to ask next, contextual to what was just discussed. Keep them short (under 50 chars each).
+Suggestions must be SPECIFIC: reference actual topics from the briefing (story themes, therapeutic areas, regions, products, agencies). Make them concrete follow-ups the user would actually click. Under 50 chars each. Avoid generic prompts like "Tell me more."
 
 RULES:
+- Be COMPREHENSIVE: cover all relevant developments with distinct points. When summarizing, typically include 4–7 key items, each with a clear takeaway and citation. Avoid thin 2-bullet answers.
 - Answer questions about regulatory developments using the briefing content above.
 - ALWAYS cite your sources with links. When referencing a story, include a markdown link using the story's headline and its /stories/ID path, like: [FDA Approves New Drug](/stories/abc-123). Also include the original source links when available, like: [FDA MedWatch](https://www.fda.gov/...).
 - Every claim should be traceable to a specific story and source.
 - Be specific: cite agencies, dates, document numbers when relevant.
 - When relevant, explicitly explain why a story surfaced for the user using reason codes such as exact code match, product family, competitor equivalent, or same TA/pathway.
 - If asked about something not in the briefing, say so clearly but offer to explain what IS covered.
-- Keep responses concise but informative — 2-4 paragraphs max unless the user asks for detail.
+- Stay readable but substantive — aim for thorough coverage rather than brevity.
 - Use a professional, conversational tone.
-- You can compare, contrast, and synthesize across multiple stories.
-- If the user asks "what's new" or similar, summarize the top 3-5 most significant developments with source links.`;
+- Compare, contrast, and synthesize across multiple stories when relevant.
+- If the user asks "what's new" or similar, summarize the 5–7 most significant developments with source links, covering different regions/domains when present.`;
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
+      max_tokens: 3500,
       system: systemPrompt,
       messages: chatMessages.map((m) => ({
         role: m.role,
@@ -211,12 +212,18 @@ RULES:
         .slice(0, 3);
     }
 
-    if (suggestions.length === 0) {
+    if (suggestions.length === 0 && stories.length > 0) {
+      const sections = [...new Set(stories.map((s) => s.section))].slice(0, 2);
+      const tas = [...new Set(stories.flatMap((s) => s.therapeutic_areas || []))].slice(0, 2);
+      const regs = [...new Set(stories.flatMap((s) => s.regions || []))].slice(0, 2);
       suggestions = [
-        "Tell me more about this topic",
-        "What else is in today's briefing?",
-        "Any related safety updates?",
-      ];
+        sections[0] ? `Tell me more about ${sections[0]}` : "What else is in today's briefing?",
+        tas[0] ? `Updates for ${tas[0]}?` : "Any related safety updates?",
+        regs[0] ? `Summarize ${regs[0]} developments` : "Compare EU vs US guidance?",
+      ].filter(Boolean).slice(0, 3);
+    }
+    if (suggestions.length === 0) {
+      suggestions = ["What else is in today's briefing?", "Any related safety updates?", "Summarize key developments"];
     }
 
     // Enforce linked citations even if model misses formatting instructions.

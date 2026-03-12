@@ -22,7 +22,7 @@ import { Profile, Signal } from "./types";
 import { query } from "./db";
 import { getDerivedProfileArrays } from "./profileUtils";
 import { searchProfileEvidence, comparativeAlerts } from "./profileSearchAgent";
-import { isValidSourceUrl } from "./sourceUrl";
+import { isValidSourceUrl, getAppBaseUrl } from "./sourceUrl";
 import { findSimilarSignals, rankSignalsForProfile } from "./embeddings";
 
 function getAnthropic() {
@@ -312,7 +312,8 @@ async function handleSearchSignalsSemantic(
 async function generateDigestHeader(
   sectionNames: string[],
   headlines: string[],
-  domainContext: string
+  domainContext: string,
+  userTherapeuticAreas?: string[]
 ): Promise<{ title: string; summary: string }> {
   if (!process.env.ANTHROPIC_API_KEY) {
     return {
@@ -320,6 +321,11 @@ async function generateDigestHeader(
       summary: "",
     };
   }
+  const taContext =
+    userTherapeuticAreas?.length
+      ? ` This digest is for a professional who tracks: ${userTherapeuticAreas.join(", ")}. Tailor the title and summary to their stated interests only. Do not emphasize topics outside their therapeutic areas.`
+      : "";
+
   try {
     const response = await getAnthropic().messages.create({
       model: "claude-sonnet-4-20250514",
@@ -328,8 +334,9 @@ async function generateDigestHeader(
         {
           role: "user",
           content: `Given this digest's section topics and headlines, generate:
-1. A catchy, specific email subject/title (6-12 words, no quotation marks). Examples: "FDA Recall Surge & Import Oversight Updates", "Cardiac Device Approvals & EU Standards Shifts"
+1. A catchy, specific email subject/title (6-12 words, no quotation marks). Examples: "FDA Recall Surge & Import Oversight Updates", "Wound Care Device Updates & EU Standards", "Cardiac Device Approvals & EU Standards Shifts"
 2. A 2-3 sentence summary explaining what's in this digest for a ${domainContext} professional. Be specific about the themes. Keep it concise (2-4 lines).
+${taContext}
 
 Sections: ${sectionNames.slice(0, 8).join("; ")}
 Sample headlines: ${headlines.slice(0, 6).join("; ")}
@@ -354,8 +361,31 @@ SUMMARY: <your 2-3 sentence summary here>`,
 
 // ─── Simple path: feed_stories → digest (same as feed, synthesized for email) ──
 
+function expandTherapeuticAreas(tas: string[]): string[] {
+  const raw = tas.map((t) => t.toLowerCase().trim()).filter(Boolean);
+  const out = new Set<string>(raw);
+  for (const t of raw) {
+    if (t.includes("wound") || t.includes("dressing")) out.add("wound care");
+    if (t === "hematoma") out.add("hematology");
+  }
+  return [...out];
+}
+
 async function buildDigestFromFeedStories(profile: Profile): Promise<string | null> {
+  const taExpanded = profile.therapeutic_areas?.length
+    ? expandTherapeuticAreas(profile.therapeutic_areas)
+    : null;
+
+  // When user has selected TAs: require overlap (case-insensitive). Exclude untagged stories — they can be off-topic (e.g. oncology).
+  const taCondition =
+    taExpanded?.length
+      ? ` AND cardinality(therapeutic_areas) > 0 AND EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($2::text[]))`
+      : "";
+  const taParam = taExpanded;
+  const baseUrl = getAppBaseUrl();
+
   const stories = await query<{
+    id: string;
     section: string;
     severity: string;
     headline: string;
@@ -366,12 +396,12 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
     published_at: string;
     relevance_reason?: string | null;
   }>(
-    `SELECT section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
+    `SELECT id, section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
      FROM feed_stories
-     WHERE (profile_id = $1 OR is_global = true)
+     WHERE (profile_id = $1 OR is_global = true)${taCondition}
      ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
      LIMIT 35`,
-    [profile.id]
+    taParam ? [profile.id, taParam] : [profile.id]
   );
 
   if (stories.length === 0) return null;
@@ -388,7 +418,8 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
   const { title, summary } = await generateDigestHeader(
     sectionNames,
     headlines,
-    domainLabel(profile)
+    domainLabel(profile),
+    profile.therapeutic_areas
   );
 
   const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
@@ -404,10 +435,13 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
       const dateStr = item.published_at
         ? (typeof item.published_at === "string" ? item.published_at.slice(0, 10) : new Date(item.published_at).toISOString().slice(0, 10))
         : new Date().toISOString().slice(0, 10);
-      const sourceLine = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
-        ? `\n\n${dateStr} · ${label} · [${label}](${item.source_urls[0]})`
+      const storyLink = `[View in feed](${baseUrl}/stories/${item.id})`;
+      const sourceLink = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
+        ? `[${label}](${item.source_urls[0]})`
         : "";
-      parts.push(`**${item.headline}**\n\n${itemSummary}${why}${sourceLine}\n\n`);
+      const linksPart = [storyLink, sourceLink].filter(Boolean).join(" · ");
+      const sourceLine = linksPart ? `\n\n${dateStr} · ${linksPart}` : "";
+      parts.push(`**[${item.headline}](${baseUrl}/stories/${item.id})**\n\n${itemSummary}${why}${sourceLine}\n\n`);
     }
   }
 
@@ -782,8 +816,20 @@ function fmtEvidenceDate(iso: string): string {
  * Falls back to raw signals only when no curated stories exist.
  */
 async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<string> {
-  // Prefer feed_stories (curated) over raw signal dump
+  // Prefer feed_stories (curated) over raw signal dump; filter by therapeutic areas when set
+  const taExpanded = profile.therapeutic_areas?.length
+    ? expandTherapeuticAreas(profile.therapeutic_areas)
+    : null;
+  // When user has selected TAs: require overlap (case-insensitive). Exclude untagged stories.
+  const taCondition =
+    taExpanded?.length
+      ? ` AND cardinality(therapeutic_areas) > 0 AND EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($2::text[]))`
+      : "";
+  const fallbackParams = taExpanded ? [profile.id, taExpanded] : [profile.id];
+  const baseUrl = getAppBaseUrl();
+
   const stories = await query<{
+    id: string;
     section: string;
     severity: string;
     headline: string;
@@ -794,27 +840,31 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
     published_at: string;
     relevance_reason?: string | null;
   }>(
-    `SELECT section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
+    `SELECT id, section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
      FROM feed_stories
-     WHERE (profile_id = $1 OR is_global = true)
+     WHERE (profile_id = $1 OR is_global = true)${taCondition}
      ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
      LIMIT 35`,
-    [profile.id]
+    fallbackParams
   );
 
-  if (stories.length > 0) {
-    const sections = new Map<string, typeof stories>();
-    for (const s of stories) {
+  // When TA filter yields nothing, do NOT fall back to unfiltered stories — that would show off-topic content (e.g. oncology when user selected dermatology). Return empty so caller uses raw signals path, which respects profile.
+  const storiesToUse = stories;
+
+  if (storiesToUse.length > 0) {
+    const sections = new Map<string, typeof storiesToUse>();
+    for (const s of storiesToUse) {
       const sec = s.section || "Regulatory Updates";
       if (!sections.has(sec)) sections.set(sec, []);
       sections.get(sec)!.push(s);
     }
     const sectionNames = Array.from(sections.keys());
-    const headlines = stories.slice(0, 10).map((s) => s.headline);
+    const headlines = storiesToUse.slice(0, 10).map((s) => s.headline);
     const { title, summary } = await generateDigestHeader(
       sectionNames,
       headlines,
-      domainLabel(profile)
+      domainLabel(profile),
+      profile.therapeutic_areas
     );
 
     const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
@@ -830,10 +880,13 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
         const dateStr = item.published_at
           ? (typeof item.published_at === "string" ? item.published_at.slice(0, 10) : new Date(item.published_at).toISOString().slice(0, 10))
           : new Date().toISOString().slice(0, 10);
-        const sourceLine = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
-          ? `\n\n${dateStr} · ${label} · [${label}](${item.source_urls[0]})`
+        const storyLink = `[View in feed](${baseUrl}/stories/${item.id})`;
+        const sourceLink = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
+          ? `[${label}](${item.source_urls[0]})`
           : "";
-        parts.push(`**${item.headline}**\n\n${itemSummary}${why}${sourceLine}\n\n`);
+        const linksPart = [storyLink, sourceLink].filter(Boolean).join(" · ");
+        const sourceLine = linksPart ? `\n\n${dateStr} · ${linksPart}` : "";
+        parts.push(`**[${item.headline}](${baseUrl}/stories/${item.id})**\n\n${itemSummary}${why}${sourceLine}\n\n`);
       }
     }
     const body = parts.join("");
@@ -855,7 +908,8 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
   const { title, summary } = await generateDigestHeader(
     sectionNames,
     headlines,
-    domainLabel(profile)
+    domainLabel(profile),
+    profile.therapeutic_areas
   );
 
   const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };

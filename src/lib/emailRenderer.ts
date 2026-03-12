@@ -10,7 +10,7 @@
  * - Source lines: YYYY-MM-DD (evidence date) · Authority · Source · Doc ID · [Link](URL)
  */
 
-import { isValidSourceUrl } from "./sourceUrl";
+import { isValidSourceUrl, getAppBaseUrl } from "./sourceUrl";
 
 /** Extract the digest title (first line) for use as email subject. */
 export function getDigestSubjectFromMarkdown(markdown: string): string {
@@ -107,7 +107,7 @@ export function renderDigestEmail(markdown: string): string {
   }
 
   const bodyHtml = htmlParts.join("\n");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://mahogany.app";
+  const appUrl = getAppBaseUrl();
   const dateStr = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -151,7 +151,7 @@ ${bodyHtml}
   </p>
   <p style="${font(12)}color:#9ca3af;margin:0;line-height:1.5;">
     <a href="${appUrl}/feed" style="color:#6b7280;text-decoration:underline;">View full feed</a> &nbsp;·&nbsp;
-    <a href="${appUrl}/profile" style="color:#6b7280;text-decoration:underline;">Update preferences</a> &nbsp;·&nbsp;
+    <a href="${appUrl}/digest" style="color:#6b7280;text-decoration:underline;">Update preferences</a> &nbsp;·&nbsp;
     <a href="${appUrl}/unsubscribe" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
   </p>
 </td></tr>

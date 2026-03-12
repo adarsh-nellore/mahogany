@@ -20,7 +20,7 @@ export async function loadFeedSignals(): Promise<Signal[]> {
   ];
   const regionBuckets: { region: string; limit: number }[] = DISABLE_US_SOURCES
     ? expandedBuckets
-    : [{ region: "US", limit: 60 }, ...expandedBuckets];
+    : [{ region: "US", limit: 120 }, ...expandedBuckets];
   const signalWindowDays = 30;
   const unionParts = regionBuckets.map(
     (b) =>

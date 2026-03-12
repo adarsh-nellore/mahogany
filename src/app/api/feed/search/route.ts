@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { query } from "@/lib/db";
-import { FeedStory, Profile } from "@/lib/types";
+import { FeedStory } from "@/lib/types";
 import { getSessionProfileId } from "@/lib/session";
 import { searchProfileEvidence } from "@/lib/profileSearchAgent";
 
@@ -30,7 +30,14 @@ function deduplicateStories(stories: FeedStory[]): FeedStory[] {
 
 export async function POST(request: NextRequest) {
   try {
-    const { q } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const q = typeof body.q === "string" ? body.q : body.query;
+    const therapeuticOpt = body.therapeutic_areas !== undefined
+      ? (Array.isArray(body.therapeutic_areas) ? body.therapeutic_areas : body.therapeutic_areas?.split(",").filter(Boolean) || [])
+      : [];
+    const regionsOpt = Array.isArray(body.regions) ? body.regions : body.regions?.split(",").filter(Boolean) || [];
+    const domainsOpt = Array.isArray(body.domains) ? body.domains : body.domains?.split(",").filter(Boolean) || [];
+    const productCodesOpt = Array.isArray(body.product_codes) ? body.product_codes : body.product_codes?.split(",").filter(Boolean) || [];
     if (!q || typeof q !== "string" || q.trim().length < 2) {
       return NextResponse.json({ error: "Query required" }, { status: 400 });
     }
@@ -47,22 +54,36 @@ export async function POST(request: NextRequest) {
     const params: unknown[] = profileId ? [profileId] : [];
     let paramIdx = params.length;
 
-    if (profileId) {
-      const profileRows = await query<Profile>(
-        `SELECT domains, regions FROM profiles WHERE id = $1`,
-        [profileId]
+    // Use explicit request filters only — no profile fallback. Empty = no filter.
+    if (regionsOpt.length > 0) {
+      paramIdx++;
+      conditions.push(`(cardinality(regions) = 0 OR regions && $${paramIdx})`);
+      params.push(regionsOpt);
+    }
+    if (domainsOpt.length > 0) {
+      paramIdx++;
+      conditions.push(`(cardinality(domains) = 0 OR domains && $${paramIdx})`);
+      params.push(domainsOpt);
+    }
+    if (therapeuticOpt.length > 0) {
+      const taParam = paramIdx + 1;
+      const taTextParam = paramIdx + 2;
+      const taTerms = therapeuticOpt.map((t: string) => t.replace(/\s+/g, " & ")).join(" | ");
+      conditions.push(
+        `(cardinality(therapeutic_areas) = 0 OR therapeutic_areas && $${taParam} OR to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ to_tsquery('english', $${taTextParam}))`
       );
-      const profile = profileRows[0];
-      if (profile?.domains?.length) {
+      params.push(therapeuticOpt);
+      params.push(taTerms);
+      paramIdx += 2;
+    }
+    if (productCodesOpt.length > 0) {
+      const pcConditions: string[] = [];
+      for (const pc of productCodesOpt) {
         paramIdx++;
-        conditions.push(`(cardinality(domains) = 0 OR domains && $${paramIdx})`);
-        params.push(profile.domains);
+        pcConditions.push(`(headline || ' ' || COALESCE(summary,'') || ' ' || COALESCE(body,'')) ILIKE $${paramIdx}`);
+        params.push(`%${String(pc).replace(/%/g, "\\%")}%`);
       }
-      if (profile?.regions?.length) {
-        paramIdx++;
-        conditions.push(`(cardinality(regions) = 0 OR regions && $${paramIdx})`);
-        params.push(profile.regions);
-      }
+      conditions.push(`(${pcConditions.join(" OR ")})`);
     }
 
     const where = `WHERE ${conditions.join(" AND ")}`;
@@ -98,9 +119,9 @@ Return valid JSON only:
 {"indices": [0, 3, 7], "explanation": "Brief 1-2 sentence explanation"}
 
 STRICT RELEVANCE RULES:
-- ONLY return stories that genuinely match the query topic. "Oncology drugs" means cancer treatments, tumor drugs, oncology approvals — NOT wound care, catheters, choking devices, or unrelated recalls.
+- ONLY return stories that genuinely match the query topic. Match the query's therapeutic area and domain — e.g. wound care queries must return wound care content, not unrelated recalls.
 - Read each story's headline, summary, AND therapeutic areas carefully before including it.
-- If the query mentions a specific therapeutic area (e.g. "oncology"), ONLY include stories where the therapeutic_areas field contains that area OR the headline/summary clearly discusses that topic.
+- If the query mentions a specific therapeutic area, ONLY include stories where the therapeutic_areas field contains that area OR the headline/summary clearly discusses that topic.
 - Return 1-8 indices, ordered by relevance (most relevant first).
 - If fewer than 3 stories are truly relevant, return fewer. Quality over quantity.
 - If nothing matches, return {"indices": [], "explanation": "No stories found matching that topic in today's briefing."}`,

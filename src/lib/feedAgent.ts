@@ -384,7 +384,7 @@ IMPORTANT: You have ${MAX_TURNS} turns. If you have not called finalize_stories 
 THEMATIC SECTIONS — generate your OWN section names that best fit the stories:
 - DO NOT use generic bucket names like "Safety & Recalls" or "Approvals & Designations."
 - Instead, create specific, descriptive section names that reflect the actual content cluster. Think like a newspaper editor grouping stories by narrative theme.
-- Good examples: "GLP-1 Regulatory Crackdown", "AI/ML Device Framework Advances", "EU MDR Implementation Updates", "Oncology Pipeline Milestones", "Post-Market Surveillance Actions", "Cardiovascular Device Safety Signals"
+- Good examples: "GLP-1 Regulatory Crackdown", "AI/ML Device Framework Advances", "EU MDR Implementation Updates", "Wound Care Device Updates", "Post-Market Surveillance Actions", "Cardiovascular Device Safety Signals"
 - Bad examples: "Safety & Recalls", "Guidance & Policy", "Industry & Analysis" (too generic — tells the reader nothing)
 - Aim for 4-8 sections. Each section should have 2-5 stories that genuinely belong together thematically.
 - Standalone stories that don't fit a cluster can have their own 1-story section with a specific name.

@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   const severity = sp.get("severity");
   const search = sp.get("search");
   const therapeutic = sp.get("therapeutic_areas")?.split(",").filter(Boolean) || [];
+  const productCodes = sp.get("product_codes")?.split(",").filter(Boolean) || [];
   const globalOnly = sp.get("global") === "true";
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10));
   const perPage = Math.min(120, Math.max(1, parseInt(sp.get("per_page") || "40", 10)));
@@ -82,6 +83,16 @@ export async function GET(request: NextRequest) {
     );
     params.push(therapeutic);
     params.push(taSearchTerms);
+  }
+
+  if (productCodes.length > 0) {
+    const pcConditions: string[] = [];
+    for (const pc of productCodes) {
+      paramIdx++;
+      pcConditions.push(`(headline || ' ' || COALESCE(summary,'') || ' ' || COALESCE(body,'')) ILIKE $${paramIdx}`);
+      params.push(`%${String(pc).replace(/%/g, "\\%")}%`);
+    }
+    conditions.push(`(${pcConditions.join(" OR ")})`);
   }
 
   if (search) {

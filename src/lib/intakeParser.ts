@@ -17,27 +17,10 @@ export interface ParsedIntakeResult {
 }
 
 const TA_KEYWORDS = [
-  "oncology",
-  "cardiology",
-  "neurology",
-  "orthopedics",
-  "endocrinology",
-  "immunology",
-  "dermatology",
-  "ophthalmology",
-  "gastroenterology",
-  "pulmonology",
-  "hematology",
-  "nephrology",
-  "infectious disease",
-  "rare disease",
-  "wound care",
-  "dental",
-  "samd",
-  "respiratory",
-  "psychiatry",
-  "pediatrics",
-  "radiology",
+  "cardiology", "dental", "dermatology", "endocrinology", "gastroenterology",
+  "hematology", "immunology", "infectious disease", "nephrology", "neurology",
+  "oncology", "ophthalmology", "orthopedics", "pediatrics", "psychiatry",
+  "pulmonology", "radiology", "rare disease", "respiratory", "samd", "wound care",
 ];
 
 const FRAMEWORK_KEYWORDS = [

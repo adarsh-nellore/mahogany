@@ -9,7 +9,7 @@ export async function fetchOpenFDAMAUDE(): Promise<SignalDraft[]> {
   const sinceStr = since.toISOString().split("T")[0].replace(/-/g, "");
   const nowStr = now.toISOString().split("T")[0].replace(/-/g, "");
 
-  const url = `${ENDPOINT}?search=date_received:[${sinceStr}+TO+${nowStr}]&limit=50`;
+  const url = `${ENDPOINT}?search=date_received:[${sinceStr}+TO+${nowStr}]&limit=100`;
 
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });

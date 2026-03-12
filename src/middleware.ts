@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const COOKIE_NAME = "mahogany_profile";
 
-const PROTECTED = ["/feed", "/digest", "/profile", "/signals"];
+const PROTECTED = ["/feed", "/digest", "/profile", "/settings", "/signals"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -14,7 +14,7 @@ export function middleware(req: NextRequest) {
   // Onboarding is always available; no redirect to profile so "Get started" leads to the flow
 
   // Legacy redirects
-  if (pathname === "/dashboard" || pathname === "/settings") {
+  if (pathname === "/dashboard") {
     return NextResponse.redirect(new URL(profileId ? "/feed" : "/", req.url));
   }
   if (pathname.startsWith("/digests")) {

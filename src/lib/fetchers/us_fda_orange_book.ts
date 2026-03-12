@@ -3,7 +3,7 @@ import { SignalDraft } from "../types";
 const ENDPOINT = "https://api.fda.gov/drug/drugsfda.json";
 
 export async function fetchOrangeBook(): Promise<SignalDraft[]> {
-  const url = `${ENDPOINT}?search=products.active_ingredients.name:*&limit=20&sort=submissions.submission_status_date:desc`;
+  const url = `${ENDPOINT}?search=products.active_ingredients.name:*&limit=50&sort=submissions.submission_status_date:desc`;
 
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });

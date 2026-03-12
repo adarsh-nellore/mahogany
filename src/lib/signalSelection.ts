@@ -64,6 +64,24 @@ export async function selectSignalsForFeed(
       conditions.push(`domains && $${paramIdx}`);
       params.push(profile.domains);
     }
+    // Filter by therapeutic areas: include signals that match profile TAs or have no TA tags (general content)
+    if (profile.therapeutic_areas?.length) {
+      const raw = profile.therapeutic_areas.map((t) => t.toLowerCase().trim()).filter(Boolean);
+      const expand = (t: string): string[] => {
+        const out: string[] = [t];
+        if (t.includes("wound") || t.includes("dressing")) out.push("wound care");
+        if (t === "hematoma") out.push("hematology");
+        return out;
+      };
+      const tasLower = [...new Set(raw.flatMap(expand))];
+      if (tasLower.length > 0) {
+        paramIdx++;
+        params.push(tasLower);
+        conditions.push(
+          `(cardinality(therapeutic_areas) = 0 OR EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($${paramIdx})))`
+        );
+      }
+    }
   }
 
   conditions.push(`published_at > now() - interval '1 day' * ${dayWindow}`);

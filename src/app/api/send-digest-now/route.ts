@@ -19,7 +19,13 @@ export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json().catch(() => ({}))) as { profile_id?: string; to?: string };
+    const body = (await request.json().catch(() => ({}))) as {
+      profile_id?: string;
+      to?: string;
+      therapeutic_areas?: string[];
+      regions?: string[];
+      domains?: string[];
+    };
     let profileId: string | null = await getSessionProfileId();
     if (!profileId && body?.profile_id) profileId = body.profile_id;
     if (!profileId) {
@@ -34,7 +40,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    const profile = profiles[0];
+    const baseProfile = profiles[0];
+    // Allow test sends to override with current form config (so unsaved changes take effect for the test)
+    const profile: Profile = {
+      ...baseProfile,
+      therapeutic_areas: Array.isArray(body.therapeutic_areas) ? body.therapeutic_areas : baseProfile.therapeutic_areas,
+      regions: Array.isArray(body.regions) ? body.regions : baseProfile.regions,
+      domains: Array.isArray(body.domains) ? body.domains : baseProfile.domains,
+    };
     const toEmail = body?.to && body.to.includes("@") ? body.to : profile.email;
 
     // Select signals using shared logic: feed_stories first, fallback with product injection + scoring

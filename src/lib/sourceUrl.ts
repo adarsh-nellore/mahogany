@@ -1,4 +1,16 @@
 /**
+ * Base URL for the app (used in digest emails so links work when deployed).
+ * Set NEXT_PUBLIC_APP_URL in production (e.g. https://yourdomain.com).
+ */
+export function getAppBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    "http://localhost:3000"
+  );
+}
+
+/**
  * Validates source URLs so we never render or store broken links.
  * Only absolute http/https URLs are considered valid.
  */

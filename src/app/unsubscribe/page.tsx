@@ -47,7 +47,7 @@ export default function UnsubscribePage() {
             </p>
             <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginBottom: "var(--space-6)" }}>
               To fully stop receiving emails, visit{" "}
-              <Link href="/profile" style={{ color: "var(--color-primary)" }}>your Profile</Link>{" "}
+              <Link href="/digest" style={{ color: "var(--color-primary)" }}>Digest & preferences</Link>{" "}
               and pause your digest.
             </p>
             <Link href="/" className="btn btn-secondary btn-md">Back to Mahogany</Link>
