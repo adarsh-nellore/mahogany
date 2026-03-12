@@ -15,6 +15,7 @@
     "@temporalio/worker": "^1.15.0",
     "@temporalio/workflow": "^1.15.0",
     "next": "16.1.6",
+    "openai": "^6.27.0",
     "pg": "^8.20.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",

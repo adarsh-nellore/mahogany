@@ -35,8 +35,8 @@
   --color-info:             #2E6482;
   --color-info-bg:          #EEF6FB;
 
-  --font-serif:             'Georgia', 'Cambria', 'Times New Roman', serif;
-  --font-sans:              -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-serif:             var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans:              var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono:              'SFMono-Regular', 'Consolas', monospace;
 
   --text-2xs:   0.625rem;
@@ -99,13 +99,17 @@
   --duration-slower: 400ms;
 
   --topbar-height: 52px;
+
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-blur: 16px;
 }
 
 /* ============================================================
    BASE
    ============================================================ */
 body {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   color: var(--color-fg);
@@ -192,7 +196,7 @@ body {
 .input {
   width: 100%;
   padding: 8px 12px;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   color: var(--color-fg);
@@ -269,12 +273,33 @@ select.input {
 .tag.active { background: var(--color-fg); border-color: var(--color-fg); color: var(--color-fg-inverse); }
 
 /* ============================================================
+   GLASSMORPHISM
+   ============================================================ */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+/* ============================================================
+   SECTION DIVIDER
+   ============================================================ */
+.section-divider {
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-border-strong) 0%, var(--color-border) 50%, transparent 100%);
+  margin: var(--space-6) 0;
+}
+
+/* ============================================================
    NAVIGATION
    ============================================================ */
 .topbar {
   height: var(--topbar-height);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
   display: flex;
   align-items: center;
   padding: 0 var(--space-6);
@@ -356,3 +381,148 @@ select.input {
 }
 .step-enter { animation: stepFadeIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .step-exit  { animation: stepFadeOut 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* ============================================================
+   SKELETON LOADERS (Phase 7: Loading states)
+   ============================================================ */
+@keyframes skeleton-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}
+
+.skeleton {
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-md);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-text {
+  height: 0.8em;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-raised);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* ============================================================
+   CARD HOVER / FOCUS TRANSITIONS (Phase 7: Polish)
+   ============================================================ */
+.card-interactive {
+  transition:
+    border-color var(--duration-base) var(--ease-default),
+    box-shadow var(--duration-base) var(--ease-default),
+    transform var(--duration-base) var(--ease-default);
+}
+.card-interactive:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.card-interactive:focus-within {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 2px rgba(158, 59, 30, 0.08);
+}
+
+/* ============================================================
+   SEVERITY BORDER INDICATORS (Phase 7: Information hierarchy)
+   ============================================================ */
+.severity-border-high {
+  border-left: 3px solid var(--color-danger);
+}
+.severity-border-medium {
+  border-left: 3px solid var(--color-warning);
+}
+.severity-border-low {
+  border-left: 3px solid var(--color-info);
+}
+
+/* ============================================================
+   TRUST INDICATORS (Phase 7: Trust)
+   ============================================================ */
+.trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-2xs);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  color: var(--color-fg-muted);
+  letter-spacing: var(--tracking-wide);
+}
+.trust-badge-verified {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+.trust-badge-ai {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+/* ============================================================
+   EMPTY STATES (Phase 7: Loading/empty/error)
+   ============================================================ */
+.empty-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-8);
+  color: var(--color-fg-muted);
+}
+.empty-state-icon {
+  font-size: var(--text-3xl);
+  margin-bottom: var(--space-3);
+  opacity: 0.4;
+}
+.empty-state-title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-2);
+}
+.empty-state-desc {
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  line-height: var(--leading-relaxed);
+  max-width: 400px;
+  margin: 0 auto var(--space-5);
+}
+
+/* ============================================================
+   ERROR BOUNDARY (Phase 7: Error states)
+   ============================================================ */
+.error-boundary {
+  padding: var(--space-6);
+  border: 1px solid #E8C8C1;
+  border-radius: var(--radius-lg);
+  background: var(--color-danger-bg);
+  text-align: center;
+}
+.error-boundary-title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-danger);
+  margin-bottom: var(--space-2);
+}
+.error-boundary-desc {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-4);
+}
+
+/* ============================================================
+   LAST UPDATED TIMESTAMP (Phase 7: Trust)
+   ============================================================ */
+.last-updated {
+  font-size: var(--text-2xs);
+  font-family: var(--font-sans);
+  color: var(--color-fg-muted);
+  letter-spacing: var(--tracking-wide);
+}

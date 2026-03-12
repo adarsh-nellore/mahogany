@@ -13,7 +13,7 @@ function getAnthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
-const VALID_REGIONS: Region[] = ["US", "EU", "UK", "Global"];
+const VALID_REGIONS: Region[] = ["US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"];
 const VALID_DOMAINS: Domain[] = ["devices", "pharma"];
 const VALID_IMPACT_TYPES: ImpactType[] = [
   "guidance_draft", "guidance_final", "safety_alert", "recall", "approval",
@@ -59,6 +59,7 @@ Rules:
 - "product_classes" should be empty [] if no device classification is mentioned.
 - For impact_severity: "high" = final rules, safety alerts, recalls, major approvals; "medium" = draft guidance, consultations, meeting highlights; "low" = general news, podcasts, workshops.
 - If the source authority is a test house (Intertek, UL, TÜV, BSI, DEKRA, SGS) or mentions IEC/ISO standards, set impact_type to "standard_update".
+- Region mapping by authority: Health Canada → "Canada", TGA → "Australia", PMDA → "Japan", Swissmedic → "Switzerland", IMDRF/WHO/ICH → "Global". Do NOT use "Global" for country-specific authorities.
 - The ai_analysis should be substantive and specific, NOT generic filler. Name companies, products, regulations, and implications.
 - Return ONLY the JSON object, no markdown fences, no explanation.`;
 
@@ -89,14 +90,16 @@ Domain hint: ${draft.domain_hint || "unknown"}`;
 
   try {
     const response = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }],
     });
 
-    const text =
+    let text =
       response.content[0].type === "text" ? response.content[0].text : "";
+    // Strip markdown JSON fences if present (Claude sometimes wraps output)
+    text = text.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
     const parsed: ClassificationResult = JSON.parse(text);
 
     return {

@@ -41,15 +41,27 @@ export default function DigestDetailPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-6) var(--space-4)" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
         <Breadcrumbs items={[
           { label: "Feed", href: "/feed" },
           { label: "Digest Archive", href: "/digest" },
           { label: digest ? new Date(digest.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Loading" },
         ]} />
 
-        {loading && <p style={{ color: "var(--color-fg-muted)", padding: "var(--space-8)", textAlign: "center" }}>Loading digest...</p>}
-        {error && <p style={{ color: "var(--color-danger)", padding: "var(--space-8)", textAlign: "center" }}>Digest not found.</p>}
+        {loading && (
+          <div style={{ padding: "var(--space-4) 0" }}>
+            <div className="skeleton-text" style={{ width: "50%", height: 14, marginBottom: "var(--space-3)" }} />
+            <div className="skeleton-text" style={{ width: "35%", height: 12, marginBottom: "var(--space-5)" }} />
+            <div className="skeleton-card" style={{ height: 400 }} />
+          </div>
+        )}
+        {error && (
+          <div className="error-boundary">
+            <div className="error-boundary-title">Digest not found</div>
+            <div className="error-boundary-desc">This digest may have been removed or the link is invalid.</div>
+            <a href="/digest" className="btn btn-secondary btn-sm">Back to Digest Archive</a>
+          </div>
+        )}
 
         {digest && (
           <>
@@ -74,7 +86,7 @@ export default function DigestDetailPage() {
                 </p>
               )}
             </div>
-            <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-surface)", padding: "var(--space-6) var(--space-8)" }}>
+            <div className="glass" style={{ borderRadius: "var(--radius-lg)", padding: "var(--space-6) var(--space-8)" }}>
               <DigestRenderer markdown={digest.markdown} />
             </div>
           </>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { runFeedAgent } from "@/lib/feedAgent";
+import { DISABLE_US_SOURCES } from "@/lib/experimentFlags";
 import { Signal, Profile } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -34,35 +35,41 @@ async function generate(): Promise<{ global_stories: number; profile_stories: Re
   );
   const newSignalCount = parseInt(newCountRow[0]?.count || "0", 10);
 
-  // Also count total available signals in 14-day window as fallback
+  // Also count total available signals in 30-day window as fallback
   const totalSignalRow = await query<{ count: string }>(
-    `SELECT count(*)::text as count FROM signals WHERE created_at > now() - interval '14 days'`
+    `SELECT count(*)::text as count FROM signals WHERE created_at > now() - interval '30 days'`
   );
   const totalRecentSignals = parseInt(totalSignalRow[0]?.count || "0", 10);
 
-  // Skip only if truly no signals exist in the 14-day window
+  // Skip only if truly no signals exist in the 30-day window
   if (newSignalCount < 1 && totalRecentSignals < 1) {
     console.log(`[generate-feed] no signals available, skipping`);
     return result;
   }
-  console.log(`[generate-feed] ${newSignalCount} new signals since last gen (${totalRecentSignals} total in 14d window)`);
+  console.log(`[generate-feed] ${newSignalCount} new signals since last gen (${totalRecentSignals} total in 30d window)`);
 
   // ── 3. Pull a large, regionally balanced signal set ───────────────
-  // Use a 14-day window for broader depth and grouping/theming,
-  // prioritizing recent + high-severity signals per region.
-  const signals = await query<Signal>(
-    `(SELECT * FROM signals WHERE region = 'US' AND created_at > now() - interval '14 days'
-      ORDER BY CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, published_at DESC LIMIT 80)
-     UNION ALL
-     (SELECT * FROM signals WHERE region = 'EU' AND created_at > now() - interval '14 days'
-      ORDER BY CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, published_at DESC LIMIT 40)
-     UNION ALL
-     (SELECT * FROM signals WHERE region = 'UK' AND created_at > now() - interval '14 days'
-      ORDER BY CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, published_at DESC LIMIT 30)
-     UNION ALL
-     (SELECT * FROM signals WHERE region = 'Global' AND created_at > now() - interval '14 days'
-      ORDER BY CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, published_at DESC LIMIT 30)`
+  // 30-day window and expanded caps for full breadth across all regions.
+  // When DISABLE_US_SOURCES, omit US bucket.
+  const severityOrder = `CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`;
+  const expandedBuckets = [
+    { region: "EU", limit: 80 },
+    { region: "UK", limit: 50 },
+    { region: "Canada", limit: 40 },
+    { region: "Australia", limit: 30 },
+    { region: "Japan", limit: 30 },
+    { region: "Switzerland", limit: 20 },
+    { region: "Global", limit: 60 },
+  ];
+  const regionBuckets: { region: string; limit: number }[] = DISABLE_US_SOURCES
+    ? expandedBuckets
+    : [{ region: "US", limit: 60 }, ...expandedBuckets];
+  const signalWindowDays = 30;
+  const unionParts = regionBuckets.map(
+    (b) =>
+      `(SELECT * FROM signals WHERE region = '${b.region}' AND created_at > now() - interval '${signalWindowDays} days' ORDER BY ${severityOrder}, published_at DESC LIMIT ${b.limit})`
   );
+  const signals = unionParts.length > 0 ? await query<Signal>(unionParts.join("\n UNION ALL\n")) : [];
 
   result.signal_count = signals.length;
 

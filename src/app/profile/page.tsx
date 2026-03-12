@@ -10,6 +10,10 @@ const REGION_OPTIONS = [
   { id: "US", label: "United States" },
   { id: "EU", label: "European Union" },
   { id: "UK", label: "United Kingdom" },
+  { id: "Canada", label: "Canada" },
+  { id: "Australia", label: "Australia" },
+  { id: "Japan", label: "Japan" },
+  { id: "Switzerland", label: "Switzerland" },
   { id: "Global", label: "Global / ICH" },
 ];
 const DEVICE_PRODUCT_TYPES = ["SaMD", "IVD", "Implant", "AI/ML Device", "Wearable", "Imaging", "Surgical Instrument", "Combo Product"];
@@ -84,7 +88,7 @@ export default function ProfilePage() {
   if (!profile) return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "var(--space-12)", textAlign: "center", color: "var(--color-fg-muted)" }}>Loading profile...</div>
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-12)", textAlign: "center", color: "var(--color-fg-muted)" }}>Loading profile...</div>
     </div>
   );
 
@@ -103,7 +107,7 @@ export default function ProfilePage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "var(--space-5) var(--space-4) var(--space-10)" }}>
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-5) var(--space-4) var(--space-10)" }}>
         <Breadcrumbs items={[{ label: "Feed", href: "/feed" }, { label: "Profile & Settings" }]} />
 
         {/* ── Profile header card ── */}
@@ -263,6 +267,9 @@ export default function ProfilePage() {
           )}
         </SectionCard>
 
+        {/* ── Section: Tracked Items (watch items) ── */}
+        <TrackedItemsSection profileId={profile.id} />
+
         {/* ── Section: Digest Settings (link to digest page) ── */}
         <Link href="/digest" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
           <div style={{
@@ -409,6 +416,203 @@ function ChipSelector({ options, selected, onToggle, labels }: { options: string
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/* ─── Tracked Items section ─── */
+interface WatchItem {
+  id: string;
+  entity_id: string;
+  canonical_name: string;
+  entity_type: string;
+  watch_type: string;
+  status: string;
+  alert_threshold: string;
+  frequency: string;
+}
+
+function TrackedItemsSection({ profileId }: { profileId: string }) {
+  const [items, setItems] = useState<WatchItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ entity_id: string; canonical_name: string; entity_type: string }[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/profiles/${profileId}/watch-items`)
+      .then((r) => r.ok ? r.json() : { items: [] })
+      .then((data) => setItems(data.items || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [profileId]);
+
+  const toggleStatus = async (itemId: string, currentStatus: string) => {
+    const newStatus = currentStatus === "active" ? "paused" : "active";
+    try {
+      await fetch(`/api/profiles/${profileId}/watch-items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, status: newStatus } : i));
+    } catch { /* ignore */ }
+  };
+
+  const updateItem = async (itemId: string, field: string, value: string) => {
+    try {
+      await fetch(`/api/profiles/${profileId}/watch-items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      setItems((prev) => prev.map((i) => i.id === itemId ? { ...i, [field]: value } : i));
+    } catch { /* ignore */ }
+  };
+
+  const searchEntities = async (q: string) => {
+    setSearchQuery(q);
+    if (q.length < 2) { setSearchResults([]); return; }
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/watch-items/search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data.results || []);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const addWatchItem = async (entityId: string) => {
+    try {
+      const res = await fetch(`/api/profiles/${profileId}/watch-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_id: entityId, watch_type: "exact" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setItems((prev) => [...prev, data.item]);
+        setSearchQuery("");
+        setSearchResults([]);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const THRESHOLD_OPTIONS = ["high", "medium", "low"];
+  const FREQUENCY_OPTIONS = ["immediate", "daily", "weekly"];
+
+  return (
+    <div style={{
+      marginBottom: "var(--space-4)",
+      border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)",
+      background: "var(--color-surface)", overflow: "hidden",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", padding: "14px 18px",
+        borderBottom: "1px solid var(--color-border)",
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>
+            Tracked Items
+          </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginTop: 1 }}>
+            Products, companies, and topics you're monitoring
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "16px 18px" }}>
+        {/* Search to add new items */}
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <div style={{ position: "relative" }}>
+            <input
+              className="input"
+              value={searchQuery}
+              onChange={(e) => searchEntities(e.target.value)}
+              placeholder="Search entities to track..."
+              style={{ width: "100%" }}
+            />
+            {searchResults.length > 0 && (
+              <div style={{
+                position: "absolute", top: "100%", left: 0, right: 0, zIndex: 10,
+                background: "var(--color-surface)", border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-md)", marginTop: 4, maxHeight: 200, overflowY: "auto",
+              }}>
+                {searchResults.map((r) => (
+                  <button
+                    key={r.entity_id}
+                    onClick={() => addWatchItem(r.entity_id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%",
+                      padding: "8px 12px", border: "none", background: "none",
+                      cursor: "pointer", textAlign: "left", fontFamily: "var(--font-sans)",
+                      fontSize: "var(--text-sm)", color: "var(--color-fg)",
+                    }}
+                  >
+                    <span className="badge badge-default">{r.entity_type}</span>
+                    {r.canonical_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)" }}>Loading tracked items...</p>
+        ) : items.length === 0 ? (
+          <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)" }}>
+            No items tracked yet. Search above to add products, companies, or topics.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {items.map((item) => (
+              <div key={item.id} style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "8px 12px",
+                borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)",
+                opacity: item.status === "paused" ? 0.6 : 1,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                    <span style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>
+                      {item.canonical_name}
+                    </span>
+                    <span className="badge badge-default" style={{ fontSize: "9px" }}>{item.entity_type}</span>
+                    <span className="badge badge-default" style={{ fontSize: "9px" }}>{item.watch_type}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select
+                      value={item.alert_threshold}
+                      onChange={(e) => updateItem(item.id, "alert_threshold", e.target.value)}
+                      style={{ fontSize: "var(--text-2xs)", padding: "1px 4px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", fontFamily: "var(--font-sans)" }}
+                    >
+                      {THRESHOLD_OPTIONS.map((t) => <option key={t} value={t}>{t} alerts</option>)}
+                    </select>
+                    <select
+                      value={item.frequency}
+                      onChange={(e) => updateItem(item.id, "frequency", e.target.value)}
+                      style={{ fontSize: "var(--text-2xs)", padding: "1px 4px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-surface)", fontFamily: "var(--font-sans)" }}
+                    >
+                      {FREQUENCY_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleStatus(item.id, item.status)}
+                  style={{
+                    fontSize: "var(--text-2xs)", padding: "2px 8px", borderRadius: "var(--radius-sm)",
+                    border: "1px solid var(--color-border)", cursor: "pointer",
+                    background: item.status === "active" ? "var(--color-primary-subtle)" : "var(--color-surface)",
+                    color: item.status === "active" ? "var(--color-primary)" : "var(--color-fg-muted)",
+                    fontFamily: "var(--font-sans)", fontWeight: 500,
+                  }}
+                >
+                  {item.status === "active" ? "Active" : "Paused"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

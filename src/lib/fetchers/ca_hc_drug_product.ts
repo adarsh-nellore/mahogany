@@ -34,7 +34,7 @@ export async function fetchHCDrugProduct(): Promise<SignalDraft[]> {
       authority: "Health Canada",
       document_id: r.drug_code != null ? String(r.drug_code) : null,
       raw_payload: r as unknown as Record<string, unknown>,
-      region_hint: "Global",
+      region_hint: "Canada",
       domain_hint: "pharma",
     }));
 

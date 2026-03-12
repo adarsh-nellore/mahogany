@@ -8,6 +8,9 @@
 -- Enable UUID generation
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- Enable pgvector for semantic embeddings
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- ─── profiles ────────────────────────────────────────────────────────
 -- One row per user. Drives all personalization: which sources to fetch,
 -- how signals are filtered/ranked, and how the digest is framed.
@@ -315,3 +318,40 @@ CREATE TABLE IF NOT EXISTS agent_actions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_actions_run ON agent_actions (run_id, created_at);
+
+-- ─── signal_embeddings ──────────────────────────────────────────────
+-- Vector embeddings for semantic search, dedup, and agent retrieval.
+-- Each signal gets one or more chunks embedded (chunk 0 = title+summary+analysis).
+CREATE TABLE IF NOT EXISTS signal_embeddings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  signal_id   UUID NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
+  chunk_index INT NOT NULL DEFAULT 0,
+  chunk_text  TEXT NOT NULL,
+  embedding   vector(1536) NOT NULL,
+  model       TEXT NOT NULL DEFAULT 'text-embedding-3-small',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_signal_embeddings_signal ON signal_embeddings (signal_id);
+
+CREATE INDEX IF NOT EXISTS idx_signal_embeddings_hnsw
+  ON signal_embeddings USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
+
+-- ─── profile_interest_embeddings ────────────────────────────────────
+-- Single vector per profile capturing their interest space.
+-- Used for semantic ranking of signals in feed/digest generation.
+CREATE TABLE IF NOT EXISTS profile_interest_embeddings (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  interest_text TEXT NOT NULL,
+  embedding     vector(1536) NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_interest_embed_profile
+  ON profile_interest_embeddings (profile_id);
+
+CREATE INDEX IF NOT EXISTS idx_profile_interest_embed_hnsw
+  ON profile_interest_embeddings USING hnsw (embedding vector_cosine_ops);

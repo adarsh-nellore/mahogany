@@ -66,7 +66,7 @@ function freshnessLabel(dateStr: string): { text: string; isNew: boolean } {
 }
 
 function storyImage(story: FeedStory): string {
-  return storyImageSvg(story.section, story.id, 680, 220, {
+  return storyImageSvg(story.section, story.id, 800, 220, {
     domains: story.domains,
     therapeutic_areas: story.therapeutic_areas,
   });
@@ -160,7 +160,14 @@ export default function StoryDetailPage() {
     return (
       <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
         <Header />
-        <div style={{ maxWidth: 680, margin: "0 auto", padding: "var(--space-12)", textAlign: "center", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", fontSize: "var(--text-sm)" }}>Loading...</div>
+        <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
+          <div className="skeleton" style={{ height: 200, borderRadius: "var(--radius-lg)", marginBottom: "var(--space-5)" }} />
+          <div className="skeleton-text" style={{ width: "40%", height: 12, marginBottom: "var(--space-3)" }} />
+          <div className="skeleton-text" style={{ width: "80%", height: 24, marginBottom: "var(--space-4)" }} />
+          <div className="skeleton-text" style={{ width: "100%", height: 14, marginBottom: "var(--space-2)" }} />
+          <div className="skeleton-text" style={{ width: "90%", height: 14, marginBottom: "var(--space-2)" }} />
+          <div className="skeleton-text" style={{ width: "70%", height: 14 }} />
+        </div>
       </div>
     );
   }
@@ -169,9 +176,12 @@ export default function StoryDetailPage() {
     return (
       <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
         <Header />
-        <div style={{ maxWidth: 680, margin: "0 auto", padding: "var(--space-12)", textAlign: "center" }}>
-          <p style={{ color: "var(--color-danger)", marginBottom: "var(--space-4)" }}>Story not found</p>
-          <Link href="/feed" className="btn btn-secondary btn-sm">Back to Feed</Link>
+        <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-12)" }}>
+          <div className="error-boundary">
+            <div className="error-boundary-title">Story not found</div>
+            <div className="error-boundary-desc">This story may have been removed or the link is invalid.</div>
+            <Link href="/feed" className="btn btn-secondary btn-sm">Back to Feed</Link>
+          </div>
         </div>
       </div>
     );
@@ -202,7 +212,7 @@ export default function StoryDetailPage() {
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
 
-      <article style={{ maxWidth: 680, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
+      <article style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
         <Breadcrumbs items={[
           { label: "Feed", href: "/feed" },
           { label: story?.section || "Story", href: "/feed" },
@@ -229,6 +239,12 @@ export default function StoryDetailPage() {
             color: freshness.isNew ? "#fff" : "var(--color-fg-muted)",
           }}>
             {freshness.isNew ? "\u26A1 " : ""}{freshness.text}
+          </span>
+          <span className={`badge ${story.severity === "high" ? "badge-danger" : story.severity === "medium" ? "badge-warning" : "badge-info"}`} style={{ fontSize: "var(--text-2xs)", padding: "1px 6px" }}>
+            {story.severity === "high" ? "High Impact" : story.severity === "medium" ? "Medium Impact" : "Low Impact"}
+          </span>
+          <span className="trust-badge-ai" style={{ fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", fontWeight: 500, padding: "1px 6px", borderRadius: "var(--radius-full)" }}>
+            AI-synthesized
           </span>
         </div>
 

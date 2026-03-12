@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { runFeedAgent } from "@/lib/feedAgent";
+import { DISABLE_US_SOURCES } from "@/lib/experimentFlags";
 import { Profile, Signal } from "@/lib/types";
 import { getSessionProfileId } from "@/lib/session";
 
@@ -24,7 +25,8 @@ export async function POST() {
     let paramIdx = 0;
 
     if (profile) {
-      if (profile.regions?.length) {
+      // "Global" means all regions — only filter by region if "Global" is NOT selected
+      if (profile.regions?.length && !profile.regions.includes("Global")) {
         paramIdx++;
         conditions.push(`region = ANY($${paramIdx})`);
         params.push(profile.regions);
@@ -36,28 +38,72 @@ export async function POST() {
       }
     }
 
-    paramIdx++;
-    conditions.push(`created_at > now() - interval '3 days'`);
+    // 30-day window and expanded caps for full breadth
+    conditions.push(`created_at > now() - interval '30 days'`);
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const baseWhere = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-    const signals = await query<Signal>(
-      `SELECT * FROM signals ${where}
-       ORDER BY
-         CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
-         published_at DESC
-       LIMIT 80`,
-      params
+    // Regionally balanced UNION ALL — expanded caps for full breadth.
+    // When DISABLE_US_SOURCES, omit US bucket.
+    const expandedBuckets = [
+      { region: "EU", limit: 80 },
+      { region: "UK", limit: 50 },
+      { region: "Canada", limit: 40 },
+      { region: "Australia", limit: 30 },
+      { region: "Japan", limit: 30 },
+      { region: "Switzerland", limit: 20 },
+      { region: "Global", limit: 60 },
+    ];
+    const regionBuckets: { region: string; limit: number }[] = DISABLE_US_SOURCES
+      ? expandedBuckets
+      : [{ region: "US", limit: 60 }, ...expandedBuckets];
+
+    // If profile has specific regions (not "Global"), only include those buckets
+    const selectedRegions = profile?.regions?.length && !profile.regions.includes("Global")
+      ? profile.regions
+      : null;
+    const activeBuckets = selectedRegions
+      ? regionBuckets.filter((b) => (selectedRegions as string[]).includes(b.region))
+      : regionBuckets;
+
+    const severityOrder = `CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END`;
+    const unionParts = activeBuckets.map((b) => {
+      const regionWhere = baseWhere
+        ? `${baseWhere} AND region = '${b.region}'`
+        : `WHERE region = '${b.region}'`;
+      return `(SELECT * FROM signals ${regionWhere} ORDER BY ${severityOrder}, published_at DESC LIMIT ${b.limit})`;
+    });
+
+    const signals = unionParts.length > 0
+      ? await query<Signal>(unionParts.join("\n UNION ALL\n"), params)
+      : [];
+
+    // Dedup by id and cap at 220 for full breadth
+    const seenIds = new Set<string>();
+    const dedupedSignals = signals.filter((s) => {
+      if (seenIds.has(s.id)) return false;
+      seenIds.add(s.id);
+      return true;
+    }).slice(0, 220);
+
+    const regionCounts = dedupedSignals.reduce((acc, s) => {
+      acc[s.region] = (acc[s.region] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(
+      `[feed/generate] signal selection: ${dedupedSignals.length} total, regions: ${JSON.stringify(regionCounts)}`
     );
 
-    if (signals.length === 0) {
+    const signalsToUse = dedupedSignals;
+
+    if (signalsToUse.length === 0) {
       return NextResponse.json({
         message: "No signals found to generate stories from.",
         stories_created: 0,
       });
     }
 
-    const stories = await runFeedAgent(signals, profile);
+    const stories = await runFeedAgent(signalsToUse, profile);
 
     if (stories.length === 0) {
       return NextResponse.json({
@@ -99,10 +145,10 @@ export async function POST() {
       }
     }
 
-    console.log(`[feed/generate] created ${inserted} stories from ${signals.length} signals`);
+    console.log(`[feed/generate] created ${inserted} stories from ${signalsToUse.length} signals`);
     return NextResponse.json({
       stories_created: inserted,
-      signal_count: signals.length,
+      signal_count: signalsToUse.length,
       profile_id: profile?.id || null,
     });
   } catch (err) {

@@ -1,12 +1,16 @@
 {
   "crons": [
     {
-      "path": "/api/poll-signals",
-      "schedule": "0 */2 * * *"
+      "path": "/api/poll-signals/fast",
+      "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/poll-signals/deep",
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/generate-feed",
-      "schedule": "30 */2 * * *"
+      "schedule": "30 */4 * * *"
     },
     {
       "path": "/api/send-digests",

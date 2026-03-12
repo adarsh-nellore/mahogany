@@ -37,7 +37,7 @@ const ALL_TAS = [
   "psychiatry", "pediatrics",
 ];
 
-const REGION_OPTIONS = ["US", "EU", "UK", "Global"];
+const REGION_OPTIONS = ["US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"];
 const DOMAIN_OPTIONS = [
   { id: "devices", label: "Devices" },
   { id: "pharma", label: "Pharma" },
@@ -81,6 +81,8 @@ export default function DigestPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [configDirty, setConfigDirty] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<"sent" | "failed" | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -142,16 +144,16 @@ export default function DigestPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 1060, margin: "0 auto", padding: "var(--space-5) var(--space-5)" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "var(--space-5) var(--space-6)" }}>
         <Breadcrumbs items={[{ label: "Feed", href: "/feed" }, { label: "Digests" }]} />
 
         <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-5)", marginTop: "var(--space-2)" }}>
 
           {/* ── Left: Config sidebar ── */}
           <div style={{ width: 300, flexShrink: 0, position: "sticky", top: 72 }}>
-            <div style={{
-              border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)",
-              background: "var(--color-surface)", overflow: "hidden",
+            <div className="glass" style={{
+              borderRadius: "var(--radius-lg)",
+              overflow: "hidden",
             }}>
               {/* Header */}
               <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--color-border)" }}>
@@ -292,6 +294,35 @@ export default function DigestPage() {
                   style={{ width: "100%", opacity: configDirty ? 1 : 0.5 }}>
                   {saving ? "Saving..." : saved ? "\u2713 Saved" : "Save Configuration"}
                 </button>
+
+                <div style={{ height: 1, background: "var(--color-border)" }} />
+
+                {/* Send Test Digest */}
+                <div>
+                  <SidebarLabel>Test Delivery</SidebarLabel>
+                  <button
+                    onClick={async () => {
+                      setSendingTest(true);
+                      setTestResult(null);
+                      try {
+                        const res = await fetch("/api/send-digest-now", { method: "POST" });
+                        setTestResult(res.ok ? "sent" : "failed");
+                      } catch {
+                        setTestResult("failed");
+                      }
+                      setSendingTest(false);
+                      setTimeout(() => setTestResult(null), 5000);
+                    }}
+                    disabled={sendingTest}
+                    className="btn btn-secondary btn-sm"
+                    style={{ width: "100%" }}
+                  >
+                    {sendingTest ? "Sending\u2026" : testResult === "sent" ? "\u2713 Digest Sent" : testResult === "failed" ? "\u2717 Send Failed" : "Send Test Digest Now"}
+                  </button>
+                  <p style={{ fontSize: 10, color: "var(--color-fg-placeholder)", fontFamily: "var(--font-sans)", margin: "6px 0 0", lineHeight: 1.4 }}>
+                    Bypasses schedule &mdash; sends a digest immediately to your email.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -307,14 +338,21 @@ export default function DigestPage() {
               </p>
             </div>
 
-            {loading && <p style={{ color: "var(--color-fg-muted)", padding: "var(--space-8)", textAlign: "center", fontFamily: "var(--font-sans)", fontSize: "var(--text-sm)" }}>Loading digests...</p>}
+            {loading && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                <div className="skeleton-card" style={{ height: 64 }} />
+                <div className="skeleton-card" style={{ height: 64 }} />
+                <div className="skeleton-card" style={{ height: 64 }} />
+              </div>
+            )}
 
             {!loading && digests.length === 0 && (
-              <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-surface)", padding: "var(--space-8)", textAlign: "center" }}>
-                <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-muted)", marginBottom: "var(--space-2)" }}>No digests yet</p>
-                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
+              <div className="empty-state">
+                <div className="empty-state-icon">📧</div>
+                <div className="empty-state-title">No digests yet</div>
+                <div className="empty-state-desc">
                   Your first digest will be generated after onboarding. Configure your preferences on the left.
-                </p>
+                </div>
               </div>
             )}
 

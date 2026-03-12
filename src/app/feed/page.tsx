@@ -18,6 +18,7 @@ interface FeedStory {
   source_urls: string[];
   source_labels: string[];
   published_at: string;
+  created_at: string;
 }
 
 interface Profile {
@@ -30,27 +31,33 @@ interface Profile {
   tracked_products: string[];
 }
 
-const SECTION_COLORS: Record<string, string> = {
-  "Safety & Recalls": "#9E3B1E",
-  "Approvals & Designations": "#3D7A5C",
-  "Clinical Trials": "#2E6482",
-  "Guidance & Policy": "#A36A1E",
-  "EU & International": "#6B5CA5",
-  "Standards & Compliance": "#544F4B",
-  "Industry & Analysis": "#2E6482",
-};
+// Deterministic color assignment for dynamic AI-generated sections
+const SECTION_PALETTE = [
+  "#9E3B1E", "#3D7A5C", "#2E6482", "#A36A1E",
+  "#6B5CA5", "#544F4B", "#8B4513", "#2F4F4F",
+  "#6A5ACD", "#B8860B", "#556B2F", "#4682B4",
+];
+function sectionColor(section: string): string {
+  let hash = 0;
+  for (let i = 0; i < section.length; i++) hash = ((hash << 5) - hash + section.charCodeAt(i)) | 0;
+  return SECTION_PALETTE[Math.abs(hash) % SECTION_PALETTE.length];
+}
 
-function freshnessLabel(dateStr: string): { text: string; isNew: boolean } {
+function addedAgoLabel(dateStr: string): { text: string; isNew: boolean } {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return { text: `Updated ${mins}m ago`, isNew: true };
+  if (mins < 60) return { text: `Added ${mins}m ago`, isNew: true };
   const hours = Math.floor(diff / 3_600_000);
-  if (hours < 4) return { text: `Updated ${hours}h ago`, isNew: true };
-  if (hours < 24) return { text: `${hours}h ago`, isNew: false };
+  if (hours < 4) return { text: `Added ${hours}h ago`, isNew: true };
+  if (hours < 24) return { text: `Added ${hours}h ago`, isNew: false };
   const days = Math.floor(hours / 24);
-  if (days === 1) return { text: "Yesterday", isNew: false };
-  if (days < 7) return { text: `${days}d ago`, isNew: false };
-  return { text: new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" }), isNew: false };
+  if (days === 1) return { text: "Added yesterday", isNew: false };
+  if (days < 7) return { text: `Added ${days}d ago`, isNew: false };
+  return { text: `Added ${new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`, isNew: false };
+}
+
+function contentDateLabel(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function truncate(text: string, max: number): string {
@@ -59,16 +66,6 @@ function truncate(text: string, max: number): string {
   return plain.slice(0, max).replace(/\s+\S*$/, "") + "\u2026";
 }
 
-const SECTION_ORDER = [
-  "Safety & Recalls",
-  "Approvals & Designations",
-  "Clinical Trials",
-  "Guidance & Policy",
-  "EU & International",
-  "Standards & Compliance",
-  "Industry & Analysis",
-];
-
 function groupBySection(stories: FeedStory[]): { section: string; stories: FeedStory[] }[] {
   const map = new Map<string, FeedStory[]>();
   for (const s of stories) {
@@ -76,12 +73,8 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
     if (!map.has(sec)) map.set(sec, []);
     map.get(sec)!.push(s);
   }
-  const ordered: { section: string; stories: FeedStory[] }[] = [];
-  for (const sec of SECTION_ORDER) {
-    if (map.has(sec)) { ordered.push({ section: sec, stories: map.get(sec)! }); map.delete(sec); }
-  }
-  for (const [sec, stories] of map) { ordered.push({ section: sec, stories }); }
-  return ordered;
+  // Preserve insertion order (which matches the agent's narrative flow)
+  return Array.from(map, ([section, stories]) => ({ section, stories }));
 }
 
 function storyMatchesProfile(story: FeedStory, profile: Profile | null): string[] {
@@ -100,17 +93,8 @@ function storyMatchesProfile(story: FeedStory, profile: Profile | null): string[
   return [...new Set(matches)].slice(0, 3);
 }
 
-function storyIcon(section: string): string {
-  const icons: Record<string, string> = {
-    "Safety & Recalls": "⚠",
-    "Approvals & Designations": "✓",
-    "Clinical Trials": "⚗",
-    "Guidance & Policy": "📘",
-    "EU & International": "🌍",
-    "Standards & Compliance": "📏",
-    "Industry & Analysis": "📈",
-  };
-  return icons[section] || "•";
+function storyIcon(_section: string): string {
+  return "•";
 }
 
 export default function FeedPage() {
@@ -145,6 +129,10 @@ export default function FeedPage() {
     if (profile?.regions?.length) {
       params.set("regions", profile.regions.join(","));
     }
+    // Therapeutic areas: API includes untagged + TA overlap + full-text match, so not overly restrictive
+    if (profile?.therapeutic_areas?.length) {
+      params.set("therapeutic_areas", profile.therapeutic_areas.join(","));
+    }
     try {
       const res = await fetch(`/api/feed/stories?${params}`);
       const data = await res.json();
@@ -152,7 +140,7 @@ export default function FeedPage() {
       setTotal(data.total || 0);
     } catch { /* ignore */ }
     setLoading(false);
-  }, [profile?.domains, profile?.regions]);
+  }, [profile?.domains, profile?.regions, profile?.therapeutic_areas]);
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
 
@@ -203,6 +191,7 @@ export default function FeedPage() {
     setGenerating(false);
   };
 
+  const [lastUpdated] = useState(() => new Date());
   const hero = stories[0];
   const secondary = stories.slice(1, 3);
   const sections = groupBySection(stories.slice(3));
@@ -211,7 +200,7 @@ export default function FeedPage() {
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
 
-      <div style={{ maxWidth: 980, margin: "0 auto", padding: "var(--space-5) var(--space-5) var(--space-8)" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "var(--space-5) var(--space-6) var(--space-8)" }}>
         {/* ── Masthead: evidence date first, then briefing date ── */}
         <div style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", margin: 0, lineHeight: "var(--leading-tight)" }}>
@@ -270,17 +259,36 @@ export default function FeedPage() {
           </div>
         </form>
 
-        <p style={{ marginBottom: "var(--space-5)", fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
-          Briefing content is based on your saved profile settings.
-        </p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-5)" }}>
+          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", margin: 0 }}>
+            Briefing content is based on your saved profile settings.
+          </p>
+          {!loading && stories.length > 0 && (
+            <span className="last-updated">
+              Last updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
 
         {/* ── Divider ── */}
         <div style={{ height: 1, background: "var(--color-border)", marginBottom: "var(--space-5)" }} />
 
         {loading && (
-          <p style={{ color: "var(--color-fg-muted)", padding: "var(--space-12)", textAlign: "center", fontFamily: "var(--font-sans)", fontSize: "var(--text-sm)" }}>
-            {searchMode === "searching" ? "Searching with AI\u2026" : "Loading\u2026"}
-          </p>
+          <div style={{ padding: "var(--space-4) 0" }}>
+            {searchMode === "searching" ? (
+              <p style={{ color: "var(--color-fg-muted)", padding: "var(--space-8)", textAlign: "center", fontFamily: "var(--font-sans)", fontSize: "var(--text-sm)" }}>
+                Searching with AI&hellip;
+              </p>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "var(--space-5)" }}>
+                <div className="skeleton-card" style={{ height: 280 }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                  <div className="skeleton-card" style={{ height: 130 }} />
+                  <div className="skeleton-card" style={{ height: 130 }} />
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Semantic search answer banner */}
@@ -309,11 +317,12 @@ export default function FeedPage() {
         )}
 
         {!loading && stories.length === 0 && (
-          <div style={{ textAlign: "center", padding: "var(--space-16)", color: "var(--color-fg-muted)" }}>
-            <p style={{ fontSize: "var(--text-lg)", marginBottom: "var(--space-3)" }}>No stories yet</p>
-            <p style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-5)", fontFamily: "var(--font-sans)" }}>
-              Generate your first AI-synthesized briefing.
-            </p>
+          <div className="empty-state">
+            <div className="empty-state-icon">📰</div>
+            <div className="empty-state-title">No stories yet</div>
+            <div className="empty-state-desc">
+              Generate your first AI-synthesized briefing from the latest regulatory signals.
+            </div>
             <button onClick={handleGenerate} disabled={generating} className="btn btn-primary btn-md">
               {generating ? "Generating\u2026" : "Generate Briefing"}
             </button>
@@ -324,23 +333,24 @@ export default function FeedPage() {
         {searchMode !== "results" && !loading && hero && (
           <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "var(--space-5)", marginBottom: "var(--space-6)", paddingBottom: "var(--space-6)", borderBottom: "1px solid var(--color-border)" }}>
             <Link href={`/stories/${hero.id}`} style={{ textDecoration: "none", color: "inherit", gridRow: "1 / 3" }}>
-              <article style={{ height: "100%", display: "flex", flexDirection: "column", cursor: "pointer", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
+              <article className={`card-interactive glass severity-border-${hero.severity || "low"}`} style={{ height: "100%", display: "flex", flexDirection: "column", cursor: "pointer", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: SECTION_COLORS[hero.section] || "var(--color-fg-muted)" }}>
+                  <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: sectionColor(hero.section) }}>
                     {hero.section}
                   </span>
-                  <FreshnessBadge dateStr={hero.published_at} />
+                  <FreshnessBadge createdAt={hero.created_at} publishedAt={hero.published_at} />
                 </div>
                 <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", lineHeight: "var(--leading-snug)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", marginBottom: "var(--space-3)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-                  <span aria-hidden="true" style={{ color: SECTION_COLORS[hero.section] || "var(--color-fg-muted)", lineHeight: 1 }}>{storyIcon(hero.section)}</span>
+                  <span aria-hidden="true" style={{ color: sectionColor(hero.section), lineHeight: 1 }}>{storyIcon(hero.section)}</span>
                   <span>{hero.headline}</span>
                 </h2>
                 <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-secondary)", lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-3)" }}>
                   {hero.summary}
                 </p>
                 <ProfileMatchTags story={hero} profile={profile} />
-                <div style={{ marginTop: "auto", paddingTop: "var(--space-3)" }}>
-                  <SourceBlock labels={hero.source_labels} max={2} />
+                <div style={{ marginTop: "auto", paddingTop: "var(--space-3)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                  <SourceBlock labels={hero.source_labels} urls={hero.source_urls} max={2} />
+                  <TrustIndicator sourceCount={hero.source_urls.length} severity={hero.severity} />
                 </div>
               </article>
             </Link>
@@ -348,28 +358,26 @@ export default function FeedPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
               {secondary.map((s, i) => (
                 <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <article style={{
+                  <article className={`card-interactive glass severity-border-${s.severity || "low"}`} style={{
                     display: "flex", flexDirection: "column", cursor: "pointer",
-                    background: "var(--color-surface)",
-                    border: "1px solid var(--color-border)",
                     borderRadius: "var(--radius-lg)",
                     padding: "var(--space-4)",
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: SECTION_COLORS[s.section] || "var(--color-fg-muted)" }}>
+                      <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: sectionColor(s.section) }}>
                         {s.section}
                       </span>
-                      <FreshnessBadge dateStr={s.published_at} />
+                      <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
                     </div>
                     <h3 style={{ fontSize: "var(--text-md)", fontWeight: "var(--weight-semibold)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: 6, letterSpacing: "var(--tracking-tight)", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span aria-hidden="true" style={{ color: SECTION_COLORS[s.section] || "var(--color-fg-muted)", lineHeight: 1 }}>{storyIcon(s.section)}</span>
+                      <span aria-hidden="true" style={{ color: sectionColor(s.section), lineHeight: 1 }}>{storyIcon(s.section)}</span>
                       <span>{s.headline}</span>
                     </h3>
                     <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", marginBottom: 6 }}>
                       {truncate(s.summary, 120)}
                     </p>
                     <ProfileMatchTags story={s} profile={profile} />
-                    <SourceBlock labels={s.source_labels} max={1} />
+                    <SourceBlock labels={s.source_labels} urls={s.source_urls} max={1} />
                   </article>
                 </Link>
               ))}
@@ -382,23 +390,23 @@ export default function FeedPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-5)", marginBottom: "var(--space-8)" }}>
             {stories.map((s) => (
               <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                <article style={{ display: "flex", flexDirection: "column", height: "100%", cursor: "pointer", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
+                <article className={`card-interactive glass severity-border-${s.severity || "low"}`} style={{ display: "flex", flexDirection: "column", height: "100%", cursor: "pointer", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6, alignItems: "center" }}>
                     {s.regions.map((r) => <span key={r} className="badge badge-default">{r}</span>)}
-                    <FreshnessBadge dateStr={s.published_at} />
+                    <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
                   </div>
-                  <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: SECTION_COLORS[s.section] || "var(--color-fg-muted)", marginBottom: 4, display: "block" }}>
+                  <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: sectionColor(s.section), marginBottom: 4, display: "block" }}>
                     {s.section}
                   </span>
                   <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--weight-semibold)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: 6, letterSpacing: "var(--tracking-tight)", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                    <span aria-hidden="true" style={{ color: SECTION_COLORS[s.section] || "var(--color-fg-muted)", lineHeight: 1 }}>{storyIcon(s.section)}</span>
+                    <span aria-hidden="true" style={{ color: sectionColor(s.section), lineHeight: 1 }}>{storyIcon(s.section)}</span>
                     <span>{s.headline}</span>
                   </h3>
                   <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", flex: 1, marginBottom: 6 }}>
                     {truncate(s.summary || s.body, 120)}
                   </p>
                   <ProfileMatchTags story={s} profile={profile} />
-                  <SourceBlock labels={s.source_labels} max={2} />
+                  <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
                 </article>
               </Link>
             ))}
@@ -407,13 +415,14 @@ export default function FeedPage() {
 
         {/* ── THEMATIC SECTIONS ── */}
         {searchMode !== "results" && !loading && sections.map(({ section, stories: sectionStories }) => (
-          <div key={section} style={{ marginBottom: "var(--space-6)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "var(--space-4)", paddingBottom: "var(--space-2)", borderBottom: "1px solid var(--color-border)" }}>
-              <div style={{ width: 4, height: 16, borderRadius: 2, background: SECTION_COLORS[section] || "var(--color-fg-muted)" }} />
+          <div key={section} style={{ marginBottom: "var(--space-8)" }}>
+            <div className="section-divider" />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "var(--space-5)" }}>
+              <div style={{ width: 5, height: 20, borderRadius: 2, background: sectionColor(section) }} />
               <h2 style={{
-                fontSize: "var(--text-base)", fontWeight: "var(--weight-bold)", fontFamily: "var(--font-sans)",
+                fontSize: "var(--text-md)", fontWeight: "var(--weight-bold)", fontFamily: "var(--font-sans)",
                 letterSpacing: "var(--tracking-wider)", textTransform: "uppercase",
-                color: SECTION_COLORS[section] || "var(--color-fg-muted)", margin: 0,
+                color: sectionColor(section), margin: 0,
               }}>
                 {section}
               </h2>
@@ -422,24 +431,27 @@ export default function FeedPage() {
               </span>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-5)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-6)" }}>
               {sectionStories.map((s) => (
                 <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <article style={{ display: "flex", flexDirection: "column", height: "100%", cursor: "pointer", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
+                  <article className={`card-interactive glass severity-border-${s.severity || "low"}`} style={{ display: "flex", flexDirection: "column", height: "100%", cursor: "pointer", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6, alignItems: "center" }}>
                       {s.regions.map((r) => <span key={r} className="badge badge-default">{r}</span>)}
                       {s.domains.map((d) => <span key={d} className="badge badge-default">{d === "pharma" ? "Pharma" : "Devices"}</span>)}
-                      <FreshnessBadge dateStr={s.published_at} />
+                      <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
                     </div>
                     <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--weight-semibold)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: 6, letterSpacing: "var(--tracking-tight)", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span aria-hidden="true" style={{ color: SECTION_COLORS[s.section] || "var(--color-fg-muted)", lineHeight: 1 }}>{storyIcon(s.section)}</span>
+                      <span aria-hidden="true" style={{ color: sectionColor(s.section), lineHeight: 1 }}>{storyIcon(s.section)}</span>
                       <span>{s.headline}</span>
                     </h3>
                     <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", flex: 1, marginBottom: 8 }}>
                       {truncate(s.summary || s.body, 100)}
                     </p>
                     <ProfileMatchTags story={s} profile={profile} />
-                    <SourceBlock labels={s.source_labels} max={2} />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+                      <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
+                      <FeedbackButtons storyId={s.id} />
+                    </div>
                   </article>
                 </Link>
               ))}
@@ -459,18 +471,26 @@ export default function FeedPage() {
 }
 
 /* ─── Freshness badge ─── */
-function FreshnessBadge({ dateStr }: { dateStr: string }) {
-  const { text, isNew } = freshnessLabel(dateStr);
-  const label = text.startsWith("Updated") ? text : `Published ${text}`;
+function FreshnessBadge({ createdAt, publishedAt }: { createdAt?: string; publishedAt: string }) {
+  const feedDate = createdAt || publishedAt;
+  const { text, isNew } = addedAgoLabel(feedDate);
+  const contentDate = contentDateLabel(publishedAt);
   return (
-    <span style={{
-      fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", fontWeight: 600,
-      padding: "1px 6px", borderRadius: "var(--radius-full)",
-      background: isNew ? "var(--color-primary)" : "var(--color-surface-raised)",
-      color: isNew ? "#fff" : "var(--color-fg-muted)",
-      whiteSpace: "nowrap",
-    }} title={`Source published: ${dateStr}`}>
-      {isNew ? "\u26A1 " : ""}{label}
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+      <span style={{
+        fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", fontWeight: 600,
+        padding: "1px 6px", borderRadius: "var(--radius-full)",
+        background: isNew ? "var(--color-primary)" : "var(--color-surface-raised)",
+        color: isNew ? "#fff" : "var(--color-fg-muted)",
+      }} title={`Added to feed: ${feedDate}`}>
+        {isNew ? "\u26A1 " : ""}{text}
+      </span>
+      <span style={{
+        fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", fontWeight: 500,
+        color: "var(--color-fg-muted)",
+      }} title={`Source published: ${publishedAt}`}>
+        {contentDate}
+      </span>
     </span>
   );
 }
@@ -497,20 +517,120 @@ function ProfileMatchTags({ story, profile }: { story: FeedStory; profile: Profi
   );
 }
 
+/* ─── Feedback buttons ─── */
+function FeedbackButtons({ storyId }: { storyId: string }) {
+  const [signal, setSignal] = useState<"up" | "down" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleFeedback = async (value: "up" | "down") => {
+    if (submitting) return;
+    const newValue = signal === value ? null : value;
+    setSubmitting(true);
+    try {
+      if (newValue) {
+        await fetch("/api/feed/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ story_id: storyId, signal: newValue }),
+        });
+      }
+      setSignal(newValue);
+    } catch { /* ignore */ }
+    setSubmitting(false);
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFeedback("up"); }}
+        title="Relevant"
+        style={{
+          padding: "2px 6px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)",
+          background: signal === "up" ? "var(--color-primary-subtle)" : "transparent",
+          color: signal === "up" ? "var(--color-primary)" : "var(--color-fg-muted)",
+          cursor: "pointer", fontSize: "var(--text-xs)", lineHeight: 1,
+          transition: "all 0.15s ease",
+        }}
+        aria-label="Mark as relevant"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" />
+        </svg>
+      </button>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleFeedback("down"); }}
+        title="Not relevant"
+        style={{
+          padding: "2px 6px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)",
+          background: signal === "down" ? "#FEE2E2" : "transparent",
+          color: signal === "down" ? "#DC2626" : "var(--color-fg-muted)",
+          cursor: "pointer", fontSize: "var(--text-xs)", lineHeight: 1,
+          transition: "all 0.15s ease",
+        }}
+        aria-label="Mark as not relevant"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 14V2" /><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+/* ─── Trust indicator ─── */
+function TrustIndicator({ sourceCount, severity }: { sourceCount: number; severity: string }) {
+  const severityLabel = severity === "high" ? "High" : severity === "medium" ? "Med" : "Low";
+  const severityClass = severity === "high" ? "badge-danger" : severity === "medium" ? "badge-warning" : "badge-info";
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      {sourceCount > 0 && (
+        <span className="trust-badge">
+          {sourceCount} {sourceCount === 1 ? "source" : "sources"}
+        </span>
+      )}
+      <span className={`badge ${severityClass}`} style={{ fontSize: "var(--text-2xs)", padding: "1px 6px" }}>
+        {severityLabel}
+      </span>
+    </div>
+  );
+}
+
 /* ─── Source block ─── */
-function SourceBlock({ labels, max }: { labels: string[]; max: number }) {
-  const unique = [...new Set(labels)].slice(0, max);
-  if (unique.length === 0) return null;
+function SourceBlock({ labels, urls, max }: { labels: string[]; urls?: string[]; max: number }) {
+  // Dedupe by label, keeping first occurrence and its URL
+  const seen = new Set<string>();
+  const items: { label: string; url?: string }[] = [];
+  for (let i = 0; i < labels.length && items.length < max; i++) {
+    const label = labels[i];
+    if (seen.has(label)) continue;
+    seen.add(label);
+    items.push({ label, url: urls?.[i] });
+  }
+  if (items.length === 0) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      {unique.map((label, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <div style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--color-border-strong)", flexShrink: 0 }} />
-          <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-secondary)", fontFamily: "var(--font-sans)", fontWeight: 500 }}>
-            {label}
-          </span>
-        </div>
-      ))}
+      {items.map((item, i) => {
+        const inner = (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--color-border-strong)", flexShrink: 0 }} />
+            <span style={{ fontSize: "var(--text-2xs)", color: item.url ? "var(--color-primary)" : "var(--color-fg-secondary)", fontFamily: "var(--font-sans)", fontWeight: 500 }}>
+              {item.label}
+            </span>
+            {item.url && (
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-fg-placeholder)", flexShrink: 0 }}>
+                <path d="M7 17 17 7" /><path d="M7 7h10v10" />
+              </svg>
+            )}
+          </div>
+        );
+        return item.url ? (
+          <a key={i} href={item.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ textDecoration: "none", color: "inherit" }}>
+            {inner}
+          </a>
+        ) : (
+          <div key={i}>{inner}</div>
+        );
+      })}
     </div>
   );
 }

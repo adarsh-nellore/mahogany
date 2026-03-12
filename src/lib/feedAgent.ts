@@ -23,6 +23,8 @@ import type {
 import { Profile, Signal, FeedStory } from "./types";
 import { query } from "./db";
 import { isValidSourceUrl, zipValidSourceLinks } from "./sourceUrl";
+import { areNearDuplicates } from "./contentQualityGate";
+import { findSimilarSignals } from "./embeddings";
 
 function getAnthropic() {
   return new Anthropic({
@@ -70,6 +72,29 @@ const TOOLS: Tool[] = [
       type: "object" as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "search_signals_semantic",
+    description:
+      "Find signals semantically similar to a natural language query using vector embeddings. More powerful than keyword search — understands meaning, not just words. Use for finding thematic connections, similar regulatory actions, or related product classes. Returns up to 10 matching signals.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language query describing what to find (e.g. 'GLP-1 cardiovascular safety concerns', 'AI medical device regulatory framework')",
+        },
+        limit: {
+          type: "number",
+          description: "Max results to return (default 10)",
+        },
+        region: {
+          type: "string",
+          description: "Optional region filter (e.g. 'US', 'EU')",
+        },
+      },
+      required: ["query"],
     },
   },
   {
@@ -146,6 +171,26 @@ async function handleSearchRelatedSignals(searchQuery: string): Promise<string> 
   }
 }
 
+async function handleSearchSignalsSemantic(
+  queryText: string,
+  limit: number,
+  region?: string
+): Promise<string> {
+  console.log(`[feed-agent] semantic search: "${queryText}"`);
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return "Semantic search unavailable (no OPENAI_API_KEY). Use search_related_signals for keyword search instead.";
+    }
+    const signals = await findSimilarSignals(queryText, { limit, region });
+    if (signals.length === 0) return `No semantically similar signals found for "${queryText}".`;
+    return signals
+      .map((s) => `- ${s.title} | ${s.authority} | ${s.impact_severity} | ${s.published_at} | ${s.url}`)
+      .join("\n");
+  } catch {
+    return "Semantic search failed. Use search_related_signals for keyword search instead.";
+  }
+}
+
 async function handleGetLatestDigest(profileId: string | null): Promise<string> {
   if (!profileId) return "No user profile — no digest history available.";
   console.log(`[feed-agent] fetching latest digest for profile ${profileId}`);
@@ -188,6 +233,41 @@ function derivePublishedAt(signalIndices: number[], signals: Signal[]): string {
 }
 
 const MAX_TURNS = 20;
+const MAX_SAME_SOURCE_SIGNALS = 3;
+
+/**
+ * Pre-process signals: remove near-duplicates and cap same-source signals.
+ */
+function deduplicateSignals(signals: Signal[]): Signal[] {
+  const deduped: Signal[] = [];
+  const sourceCount = new Map<string, number>();
+
+  for (const signal of signals) {
+    // Cap same-source signals per section
+    const srcCount = sourceCount.get(signal.source_id) || 0;
+    if (srcCount >= MAX_SAME_SOURCE_SIGNALS) continue;
+
+    // Check for near-duplicates against already-accepted signals
+    const isDuplicate = deduped.some((existing) =>
+      areNearDuplicates(
+        existing.title + " " + existing.summary,
+        signal.title + " " + signal.summary,
+        0.8
+      )
+    );
+
+    if (isDuplicate) {
+      console.log(`[feed-agent] skipping near-duplicate: "${signal.title.slice(0, 60)}..."`);
+      continue;
+    }
+
+    deduped.push(signal);
+    sourceCount.set(signal.source_id, srcCount + 1);
+  }
+
+  console.log(`[feed-agent] dedup: ${signals.length} → ${deduped.length} signals`);
+  return deduped;
+}
 
 export async function runFeedAgent(
   signals: Signal[],
@@ -195,8 +275,29 @@ export async function runFeedAgent(
 ): Promise<Omit<FeedStory, "id" | "created_at">[]> {
   const client = getAnthropic();
 
-  const signalBlock = signals
-    .slice(0, 120)
+  // Pre-process: remove near-duplicates and cap same-source signals
+  const processedSignals = deduplicateSignals(signals);
+
+  // Round-robin interleave by region for balanced representation
+  const byRegion = new Map<string, Signal[]>();
+  for (const s of processedSignals) {
+    if (!byRegion.has(s.region)) byRegion.set(s.region, []);
+    byRegion.get(s.region)!.push(s);
+  }
+  const interleaved: Signal[] = [];
+  const regionQueues = Array.from(byRegion.values());
+  let added = true;
+  while (added && interleaved.length < 150) {
+    added = false;
+    for (const queue of regionQueues) {
+      if (queue.length > 0 && interleaved.length < 150) {
+        interleaved.push(queue.shift()!);
+        added = true;
+      }
+    }
+  }
+
+  const signalBlock = interleaved
     .map(
       (s, i) =>
         `[${i}] ${s.title}
@@ -233,18 +334,18 @@ ${profileContext}
 YOUR WORKFLOW:
 1. CHECK DIGEST CONTEXT: Call get_latest_digest ONCE to understand what was covered before.
 2. RESEARCH: Use fetch_source_page on the 3-5 most important signals. Use search_related_signals 2-3 times to find connections. Keep total tool calls ≤ 8 to leave enough turns for writing.
-3. WRITE & FINALIZE: After research, mentally group signals into 15-25 thematic stories, write them, and call finalize_stories with the complete JSON array. This is your last action — do not call any more tools after finalize_stories.
+3. WRITE & FINALIZE: After research, mentally group signals into 25-40 thematic stories, write them, and call finalize_stories with the complete JSON array. This is your last action — do not call any more tools after finalize_stories.
 
 IMPORTANT: You have ${MAX_TURNS} turns. If you have not called finalize_stories by turn 12, stop all research immediately and finalize your stories with what you have.
 
-THEMATIC SECTIONS — assign each story to exactly one:
-- "Safety & Recalls" — FDA safety alerts, device recalls, drug enforcement, FSCA, MHRA alerts, post-market surveillance findings. Group by manufacturer or product family when possible.
-- "Approvals & Designations" — new drug/device approvals, 510(k) clearances, PMA approvals, orphan designations, priority review vouchers, breakthrough designations, accelerated approvals, EMA marketing authorizations.
-- "Clinical Trials" — pivotal trial results, new trial initiations, protocol amendments, DSMB recommendations, clinical hold updates. Group by therapeutic area or mechanism of action.
-- "Guidance & Policy" — draft/final guidances, Federal Register notices, ICH updates, regulatory framework changes, advisory committee recommendations, congressional activity.
-- "EU & International" — EMA decisions, MHRA actions, IMDRF guidance, WHO recommendations, Health Canada, TGA, PMDA actions, MDR/IVDR implementation, CMDh referrals. ALWAYS include this section with 3+ stories if there are ANY non-US signals.
-- "Standards & Compliance" — IEC/ISO updates, harmonized standards, notified body activities, test house newsletters, cGMP inspections, quality system changes.
-- "Industry & Analysis" — market analysis, competitive intelligence, M&A, corporate strategy, expert commentary, regulatory landscape analysis. This is where you add the most editorial value.
+THEMATIC SECTIONS — generate your OWN section names that best fit the stories:
+- DO NOT use generic bucket names like "Safety & Recalls" or "Approvals & Designations."
+- Instead, create specific, descriptive section names that reflect the actual content cluster. Think like a newspaper editor grouping stories by narrative theme.
+- Good examples: "GLP-1 Regulatory Crackdown", "AI/ML Device Framework Advances", "EU MDR Implementation Updates", "Oncology Pipeline Milestones", "Post-Market Surveillance Actions", "Cardiovascular Device Safety Signals"
+- Bad examples: "Safety & Recalls", "Guidance & Policy", "Industry & Analysis" (too generic — tells the reader nothing)
+- Aim for 4-8 sections. Each section should have 2-5 stories that genuinely belong together thematically.
+- Standalone stories that don't fit a cluster can have their own 1-story section with a specific name.
+- REGIONAL SECTIONS: If there are non-US signals, create region-specific sections like "EMA & European Regulators", "Health Canada Updates", "MHRA Actions" rather than lumping them all into one "International" bucket.
 
 STORY FORMAT — each story in the JSON array must have:
 - "headline": Specific and analytical. Name companies, products, regulation numbers, therapeutic areas. Bloomberg/Reuters style. NOT generic like "FDA Issues New Guidance" — instead "FDA Finalizes AI/ML-Based SaMD Framework, Mandating Real-World Performance Monitoring for Class II Devices."
@@ -257,10 +358,10 @@ STORY FORMAT — each story in the JSON array must have:
   * **Industry impact analysis**: Which companies are affected? What are the competitive implications? What does this mean for products in development?
   * **What to watch / action items**: Concrete next steps for RA/QA professionals. Comment deadlines, implementation timelines, recommended actions.
   * Use **bold** for key terms, company names, and regulation numbers. Use [inline links](url) to source documents extensively.
-- "section": One of the section names above. REQUIRED.
+- "section": Your chosen thematic section name. REQUIRED. Must be specific and descriptive (see section rules above).
 - "severity": "high" (final rules, major safety alerts, product withdrawals, significant approvals), "medium" (draft guidance, consultations, routine approvals), "low" (news, analysis, workshops)
 - "domains": array of "devices" and/or "pharma"
-- "regions": array of "US", "EU", "UK", "Global"
+- "regions": array of "US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"
 - "therapeutic_areas": array of relevant TAs. Use standard labels: "oncology", "cardiology", "neurology", "orthopedics", "endocrinology", "immunology", "dermatology", "ophthalmology", "gastroenterology", "pulmonology", "hematology", "nephrology", "infectious disease", "rare disease", "wound care", "dental", "SaMD", "respiratory", "psychiatry", "pediatrics". BE COMPREHENSIVE — tag ALL that apply, even indirectly. A cardiac device recall must tag "cardiology". A diabetes drug must tag "endocrinology". Users filter by TA, so untagged stories are invisible to them.
 - "impact_types": array of impact types from the source signals
 - "signal_indices": array of 0-based indices referencing which signals this story synthesizes. Minimum 1, aim for 3-8 when possible.
@@ -268,18 +369,19 @@ STORY FORMAT — each story in the JSON array must have:
 - "source_labels": array of human-readable source labels matching source_urls
 
 CRITICAL RULES:
-- Generate 15-25 stories. Cover the most important signals. MUST cover at least 5 different sections.
+- Generate 25-40 stories. Cover the most important signals. MUST cover at least 5 different sections.
 - EVERY SIGNAL MUST BE COVERED. If you cannot group a signal with others, write it as a standalone story. No signal should be left uncovered.
 - GROUPING WHEN POSSIBLE: Group related signals (same company, same product class, same therapeutic area, same regulatory pathway) into richer multi-source stories. But never skip a signal just because it doesn't fit a group.
-- STORY DEPTH: For grouped stories, aim for 600-1000 words. For standalone signals, 300-500 words is acceptable. Quality matters more than minimum word counts.
+- STORY DEPTH: For grouped stories, aim for 500-800 words. For standalone signals, 200-400 words is acceptable. Quality matters more than minimum word counts.
 - REGIONAL BALANCE: If there are EU/UK/Global signals, produce dedicated stories. The "EU & International" section should have 3-6 stories whenever non-US signals exist. Do NOT make this a US-only feed.
+- INTERNATIONAL MINIMUM: At least 30% of stories must cover non-US regions. If you have EU/UK/Canada/Japan/Australia signals, produce at least 8 dedicated international stories. This is non-negotiable.
 - THERAPEUTIC AREA COVERAGE: If signals span multiple therapeutic areas (oncology, cardiology, neurology, etc.), ensure stories are distributed across them. The reader should see coverage relevant to their tracked areas.
 - COMPETITIVE INTELLIGENCE: When multiple companies have signals related to the same space, synthesize them into a competitive landscape story in "Industry & Analysis."
 - CROSS-REFERENCING: When you find connections between signals (same company across regions, same product class across safety/approval/trial), weave them together. This is the knowledge graph the user is paying for.
 - Every story must cite sources with URLs. Use the source labels below.
 - The output MUST be a valid JSON array string.
 - "signal_indices": can reference 1 or more signals. Standalone single-signal stories are valid and encouraged for important items that don't group well.
-- Source labels: us_fda_medwatch_rss→"FDA MedWatch", us_federal_register→"Federal Register", clinicaltrials→"ClinicalTrials.gov", us_openfda_device_recall→"openFDA Recalls", us_openfda_drug_enforcement→"openFDA Drug Enforcement", us_openfda_510k→"FDA 510(k)", us_openfda_pma→"FDA PMA", us_openfda_maude→"FDA MAUDE", us_openfda_classification→"FDA Device Classification", us_fda_orange_book→"FDA Orange Book", us_fda_ndc→"FDA NDC Directory", us_dailymed_rss→"DailyMed", us_fda_orphan_designations→"FDA Orphan Products", us_fda_pmcpmr→"FDA PMC/PMR", us_fda_guidance_rss→"FDA Guidance", us_fda_press_rss→"FDA Press", eu_ema_*→"EMA", eu_ema_prime→"EMA PRIME", eu_ema_clinical_data→"EMA Clinical Data", eu_ema_medicines_eval→"EMA CHMP", eu_ctis_trials→"EU CTIS", eu_ema_rwd→"EMA RWD", uk_mhra_*→"MHRA", ca_hc_*→"Health Canada", au_tga_*→"TGA Australia", jp_pmda_*→"PMDA Japan", standards_*→"Standards Update", industry_*→infer from source, podcast_*→infer from source, global_who_*→"WHO", global_imdrf_*→"IMDRF", global_eurlex_*→"EUR-Lex".`;
+- "source_labels": Format as "Authority — Article Title" (e.g., "FDA MedWatch — Medline Catheter Recall Notice", "EMA — Keytruda Type II Variation Opinion"). Do NOT use authority name alone. Each signal provides a title — incorporate it. Authority prefixes by source_id: us_fda_medwatch_rss→"FDA MedWatch", us_federal_register→"Federal Register", clinicaltrials→"ClinicalTrials.gov", us_openfda_device_recall→"openFDA Recalls", us_openfda_drug_enforcement→"openFDA Drug Enforcement", us_openfda_510k→"FDA 510(k)", us_openfda_pma→"FDA PMA", us_openfda_maude→"FDA MAUDE", us_openfda_classification→"FDA Device Classification", us_fda_orange_book→"FDA Orange Book", us_fda_ndc→"FDA NDC Directory", us_dailymed_rss→"DailyMed", us_fda_orphan_designations→"FDA Orphan Products", us_fda_pmcpmr→"FDA PMC/PMR", us_fda_guidance_rss→"FDA Guidance", us_fda_press_rss→"FDA Press", eu_ema_*→"EMA", eu_ema_prime→"EMA PRIME", eu_ema_clinical_data→"EMA Clinical Data", eu_ema_medicines_eval→"EMA CHMP", eu_ctis_trials→"EU CTIS", eu_ema_rwd→"EMA RWD", uk_mhra_*→"MHRA", ca_hc_*→"Health Canada", au_tga_*→"TGA Australia", jp_pmda_*→"PMDA Japan", standards_*→"Standards Update", industry_*→infer from source, global_who_*→"WHO", global_imdrf_*→"IMDRF", global_eurlex_*→"EUR-Lex".`;
 
   const messages: MessageParam[] = [
     {
@@ -288,7 +390,7 @@ CRITICAL RULES:
     },
   ];
 
-  console.log(`[feed-agent] starting with ${signals.length} signals${profile ? ` for ${profile.name}` : " (global)"}`);
+  console.log(`[feed-agent] starting with ${processedSignals.length} signals (from ${signals.length} raw)${profile ? ` for ${profile.name}` : " (global)"}`);
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     // Use streaming to avoid the SDK's 10-min timeout guard for large contexts
@@ -330,6 +432,18 @@ CRITICAL RULES:
           const parsed: StoryOutput[] = JSON.parse(storiesJson);
           const mapped = parsed.map((s) => {
             const validSources = zipValidSourceLinks(s.source_urls, s.source_labels);
+
+            // Enrich generic labels: if a label lacks " — " (no article title),
+            // find the matching signal by URL and append its title.
+            const enrichedLabels = validSources.map((src) => {
+              if (src.label.includes(" — ")) return src.label;
+              const matchingSignal = processedSignals.find((sig) => sig.url === src.url);
+              if (matchingSignal) {
+                return `${src.label} — ${matchingSignal.title.slice(0, 80)}`;
+              }
+              return src.label;
+            });
+
             return {
               profile_id: profile?.id || null,
               headline: s.headline,
@@ -341,11 +455,11 @@ CRITICAL RULES:
               regions: (s.regions || []) as FeedStory["regions"],
               therapeutic_areas: s.therapeutic_areas || [],
               impact_types: (s.impact_types || []) as FeedStory["impact_types"],
-              signal_ids: (s.signal_indices || []).map((idx) => signals[idx]?.id).filter(Boolean),
+              signal_ids: (s.signal_indices || []).map((idx) => interleaved[idx]?.id ?? signals[idx]?.id).filter(Boolean),
               source_urls: validSources.map((x) => x.url),
-              source_labels: validSources.map((x) => x.label),
+              source_labels: enrichedLabels,
               is_global: !profile,
-              published_at: derivePublishedAt(s.signal_indices || [], signals),
+              published_at: derivePublishedAt(s.signal_indices || [], interleaved),
             };
           });
           if (mapped.length > 0) {
@@ -384,6 +498,13 @@ CRITICAL RULES:
       } else if (toolUse.name === "search_related_signals") {
         const result = await handleSearchRelatedSignals(input.search_query as string);
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
+      } else if (toolUse.name === "search_signals_semantic") {
+        const result = await handleSearchSignalsSemantic(
+          input.query as string,
+          (input.limit as number) || 10,
+          input.region as string | undefined
+        );
+        toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
       } else if (toolUse.name === "get_latest_digest") {
         const result = await handleGetLatestDigest(profile?.id || null);
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
@@ -410,6 +531,12 @@ function parseStoriesFromText(
       const parsed: StoryOutput[] = JSON.parse(jsonMatch[0]);
       return parsed.map((s) => {
         const validSources = zipValidSourceLinks(s.source_urls, s.source_labels);
+        const enrichedLabels = validSources.map((src) => {
+          if (src.label.includes(" — ")) return src.label;
+          const matchingSignal = signals.find((sig) => sig.url === src.url);
+          if (matchingSignal) return `${src.label} — ${matchingSignal.title.slice(0, 80)}`;
+          return src.label;
+        });
         return {
           profile_id: null,
           headline: s.headline,
@@ -423,7 +550,7 @@ function parseStoriesFromText(
           impact_types: (s.impact_types || []) as FeedStory["impact_types"],
           signal_ids: (s.signal_indices || []).map((idx) => signals[idx]?.id).filter(Boolean),
           source_urls: validSources.map((x) => x.url),
-          source_labels: validSources.map((x) => x.label),
+          source_labels: enrichedLabels,
           is_global: true,
           published_at: derivePublishedAt(s.signal_indices || [], signals),
         };
@@ -444,7 +571,7 @@ function fallbackStories(
   return selected.map((s) => {
     const sourceUrl = s.url && isValidSourceUrl(s.url) ? s.url : null;
     const sourceUrls = sourceUrl ? [sourceUrl] : [];
-    const sourceLabels = sourceUrl ? [s.authority || "Source"] : [];
+    const sourceLabels = sourceUrl ? [`${s.authority || "Source"} — ${s.title.slice(0, 80)}`] : [];
     const body = sourceUrl
       ? `**${s.title}**\n\n${s.ai_analysis || s.summary}\n\nSource: [${s.authority}](${s.url})`
       : `**${s.title}**\n\n${s.ai_analysis || s.summary}`;

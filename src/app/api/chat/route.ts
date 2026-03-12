@@ -64,19 +64,71 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Enhanced retrieval: combine recency + relevance + FTS ──────────
+    const userQuery = chatMessages[chatMessages.length - 1]?.content || "";
+
     const conditions = profileId
       ? `WHERE (profile_id = $1 OR is_global = true)`
       : `WHERE is_global = true`;
     const params = profileId ? [profileId] : [];
 
-    const stories = await query<FeedStory>(
+    // 1. Recent stories (recency-based baseline)
+    const recentStories = await query<FeedStory>(
       `SELECT id, headline, summary, body, section, severity, domains, regions,
               therapeutic_areas, impact_types, source_urls, source_labels, published_at
        FROM feed_stories ${conditions}
        ORDER BY published_at DESC
-       LIMIT 40`,
+       LIMIT 25`,
       params
     );
+
+    // 2. Full-text search on user query against stories (if query is substantive)
+    let ftsStories: FeedStory[] = [];
+    if (userQuery.length >= 3) {
+      const ftsConditions = profileId
+        ? `WHERE (profile_id = $1 OR is_global = true) AND to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ plainto_tsquery('english', $2)`
+        : `WHERE is_global = true AND to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ plainto_tsquery('english', $1)`;
+      const ftsParams = profileId ? [profileId, userQuery] : [userQuery];
+
+      ftsStories = await query<FeedStory>(
+        `SELECT id, headline, summary, body, section, severity, domains, regions,
+                therapeutic_areas, impact_types, source_urls, source_labels, published_at
+         FROM feed_stories ${ftsConditions}
+         ORDER BY published_at DESC
+         LIMIT 15`,
+        ftsParams
+      );
+    }
+
+    // 3. Signal-level data for entity-specific questions
+    let signalContext = "";
+    if (userQuery.length >= 3) {
+      const signalRows = await query<{ title: string; summary: string; url: string; authority: string; published_at: string }>(
+        `SELECT title, summary, url, authority, published_at
+         FROM signals
+         WHERE to_tsvector('english', title || ' ' || summary) @@ plainto_tsquery('english', $1)
+         ORDER BY published_at DESC
+         LIMIT 10`,
+        [userQuery]
+      ).catch(() => []);
+
+      if (signalRows.length > 0) {
+        signalContext = `\n\nRAW SIGNALS MATCHING QUERY:\n${signalRows.map((s) =>
+          `- ${s.title} | ${s.authority} | ${s.published_at} | ${s.url}`
+        ).join("\n")}`;
+      }
+    }
+
+    // Merge and deduplicate stories (FTS results first, then recency)
+    const seenIds = new Set<string>();
+    const stories: FeedStory[] = [];
+    for (const s of [...ftsStories, ...recentStories]) {
+      if (!seenIds.has(s.id)) {
+        seenIds.add(s.id);
+        stories.push(s);
+      }
+      if (stories.length >= 40) break;
+    }
 
     const storyContext = stories.map((s, i) => {
       const sources = s.source_labels.map((label, j) => {
@@ -109,6 +161,7 @@ ${profileContext}
 BRIEFING CONTENT (${stories.length} stories):
 ${storyContext}
 ${evidenceContext}
+${signalContext}
 
 RESPONSE FORMAT:
 You must ALWAYS end your response with exactly this format on its own line:

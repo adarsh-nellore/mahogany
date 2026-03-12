@@ -1,6 +1,6 @@
 // ─── Enums & Literal Types ───────────────────────────────────────────
 
-export type Region = "US" | "EU" | "UK" | "Global";
+export type Region = "US" | "EU" | "UK" | "Canada" | "Australia" | "Japan" | "Switzerland" | "Global";
 
 export type Domain = "devices" | "pharma";
 

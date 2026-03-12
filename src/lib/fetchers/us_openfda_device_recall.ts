@@ -24,7 +24,7 @@ export async function fetchOpenFDADeviceRecall(): Promise<SignalDraft[]> {
     const drafts: SignalDraft[] = results.map(
       (r: Record<string, unknown>) => ({
         source_id: "us_openfda_device_recall",
-        url: `https://api.fda.gov/device/recall.json?search=res_event_number:"${r.res_event_number}"`,
+        url: `https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfres/res.cfm?id=${r.res_event_number}`,
         title: `Device Recall: ${(r.product_description as string || "").slice(0, 200)}`,
         summary: `${r.reason_for_recall || ""} — ${r.root_cause_description || ""}`.trim(),
         published_at: new Date().toISOString(),

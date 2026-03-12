@@ -23,6 +23,8 @@ async function sendDigests(): Promise<DigestSendSummary> {
     const currentHour = now.getUTCHours();
     const hourWindow = [(currentHour + 23) % 24, currentHour, (currentHour + 1) % 24];
 
+    console.log(`[send-digests] currentHour=${currentHour} UTC, hourWindow=${JSON.stringify(hourWindow)}, time=${now.toISOString()}`);
+
     const profiles = await query<Profile>(
       `SELECT * FROM profiles
        WHERE digest_send_hour = ANY($1)
@@ -34,6 +36,8 @@ async function sendDigests(): Promise<DigestSendSummary> {
          )`,
       [hourWindow]
     );
+
+    console.log(`[send-digests] matched ${profiles.length} profile(s) for hourWindow=${JSON.stringify(hourWindow)}`);
 
     if (profiles.length === 0) {
       return summary;
@@ -114,10 +118,13 @@ async function sendDigests(): Promise<DigestSendSummary> {
         }
 
         const signalIds = signals.map((s) => s.id);
+        const deliveryStatus = sendError ? "failed" : "sent";
+        const deliveryError = sendError ? JSON.stringify(sendError) : null;
+
         await query(
-          `INSERT INTO digests (profile_id, signal_ids, markdown, html)
-           VALUES ($1, $2, $3, $4)`,
-          [profile.id, signalIds, markdown, html]
+          `INSERT INTO digests (profile_id, signal_ids, markdown, html, delivery_status, delivery_error)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [profile.id, signalIds, markdown, html, deliveryStatus, deliveryError]
         );
 
         await query(
@@ -128,6 +135,22 @@ async function sendDigests(): Promise<DigestSendSummary> {
         if (!sendError) {
           summary.total_sent++;
         }
+
+        // Check for ingestion gaps — if last digest was > expected cadence + buffer,
+        // note the gap period for the next digest to include backfill
+        if (profile.last_digest_at) {
+          const lastDigest = new Date(profile.last_digest_at);
+          const expectedHours = profile.digest_cadence === "daily" ? 26
+            : profile.digest_cadence === "twice_weekly" ? 96
+            : 192;
+          const actualHours = (Date.now() - lastDigest.getTime()) / 3_600_000;
+          if (actualHours > expectedHours) {
+            console.log(
+              `[send-digests] ingestion gap detected for ${profile.email}: ${Math.round(actualHours)}h since last digest (expected ~${expectedHours}h)`
+            );
+          }
+        }
+
         summary.profiles.push({
           id: profile.id,
           email: profile.email,
@@ -135,7 +158,7 @@ async function sendDigests(): Promise<DigestSendSummary> {
         });
 
         console.log(
-          `[send-digests] ${sendError ? "saved (email failed)" : "sent"} digest for ${profile.email} with ${signals.length} signals`
+          `[send-digests] ${deliveryStatus} digest for ${profile.email} with ${signals.length} signals`
         );
       } catch (profileErr) {
         const msg = `Profile ${profile.id} error: ${profileErr}`;

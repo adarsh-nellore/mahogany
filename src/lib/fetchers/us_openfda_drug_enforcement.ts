@@ -22,7 +22,9 @@ export async function fetchOpenFDADrugEnforcement(): Promise<SignalDraft[]> {
     const results: Record<string, unknown>[] = data.results || [];
     const drafts: SignalDraft[] = results.map((r) => ({
       source_id: "us_openfda_drug_enforcement",
-      url: `https://api.fda.gov/drug/enforcement.json?search=recall_number:"${r.recall_number}"`,
+      url: r.recall_number
+        ? `https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts?search=${encodeURIComponent(r.recall_number as string)}`
+        : `https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts`,
       title: `Drug Recall: ${((r.product_description as string) || (r.reason_for_recall as string) || "Unknown").slice(0, 200)}`,
       summary: `${r.reason_for_recall || ""} — Classification: ${r.classification || "N/A"}, Status: ${r.status || "N/A"}`,
       published_at: formatOpenFDADate(r.report_date as string),

@@ -2,10 +2,18 @@
  * Validates source URLs so we never render or store broken links.
  * Only absolute http/https URLs are considered valid.
  */
+// Raw API JSON endpoints that aren't useful as user-facing links
+const API_URL_PATTERNS = [
+  /^https?:\/\/api\.fda\.gov\//,
+];
+
 export function isValidSourceUrl(url: unknown): boolean {
   if (typeof url !== "string") return false;
   const u = url.trim();
-  return u.length > 0 && (u.startsWith("http://") || u.startsWith("https://"));
+  if (u.length === 0 || !(u.startsWith("http://") || u.startsWith("https://"))) return false;
+  // Filter out raw API endpoints that return JSON, not readable pages
+  if (API_URL_PATTERNS.some((p) => p.test(u))) return false;
+  return true;
 }
 
 /**

@@ -16,7 +16,7 @@ type ResolvedMention = ParsedMention & {
   resolution: "exact" | "alias" | "created";
 };
 
-const REGION_OPTIONS = ["US", "EU", "UK", "Global"] as const;
+const REGION_OPTIONS = ["US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"] as const;
 const DOMAIN_OPTIONS = [
   { id: "devices", label: "Medical Devices" },
   { id: "pharma", label: "Pharma & Biologics" },

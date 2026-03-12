@@ -11,14 +11,15 @@ async function getClient(): Promise<Client> {
   return cachedClient;
 }
 
-export async function startWorkflow<T>(
+export async function startWorkflow(
   workflow: string,
   workflowId: string,
   args: unknown[]
-): Promise<WorkflowHandle<T>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<WorkflowHandle<any>> {
   const client = await getClient();
   const taskQueue = process.env.TEMPORAL_TASK_QUEUE || "mahogany-agents";
-  return client.workflow.start<T>(workflow, {
+  return client.workflow.start(workflow, {
     taskQueue,
     workflowId,
     args,

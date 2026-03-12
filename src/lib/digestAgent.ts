@@ -22,6 +22,7 @@ import { Profile, Signal } from "./types";
 import { query } from "./db";
 import { searchProfileEvidence, comparativeAlerts } from "./profileSearchAgent";
 import { isValidSourceUrl } from "./sourceUrl";
+import { findSimilarSignals, rankSignalsForProfile } from "./embeddings";
 
 function getAnthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -104,6 +105,29 @@ const TOOLS: Tool[] = [
       type: "object" as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "search_signals_semantic",
+    description:
+      "Find signals semantically similar to a natural language query using vector embeddings. More powerful than keyword search — understands meaning and context. Use for finding thematic connections across signals. Returns up to 10 matching signals.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "Natural language query (e.g. 'GLP-1 cardiovascular safety', 'Class III device post-market surveillance')",
+        },
+        limit: {
+          type: "number",
+          description: "Max results (default 10)",
+        },
+        region: {
+          type: "string",
+          description: "Optional region filter",
+        },
+      },
+      required: ["query"],
     },
   },
   {
@@ -262,6 +286,26 @@ async function handleGetComparativeAlerts(profileId: string): Promise<string> {
   }
 }
 
+async function handleSearchSignalsSemantic(
+  queryText: string,
+  limit: number,
+  region?: string
+): Promise<string> {
+  console.log(`[agent] semantic search: "${queryText}"`);
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      return "Semantic search unavailable (no OPENAI_API_KEY). Use search_related_signals instead.";
+    }
+    const signals = await findSimilarSignals(queryText, { limit, region });
+    if (signals.length === 0) return `No semantically similar signals found for "${queryText}".`;
+    return signals
+      .map((s) => `- ${s.title} | ${s.authority} | ${s.impact_severity} | ${s.published_at} | ${s.url}`)
+      .join("\n");
+  } catch {
+    return "Semantic search failed. Use search_related_signals instead.";
+  }
+}
+
 // ─── Agent Loop ──────────────────────────────────────────────────────
 
 const MAX_TURNS = 12;
@@ -273,7 +317,30 @@ export async function runDigestAgent(
   const client = getAnthropic();
   const evidence = await searchProfileEvidence(profile.id, 20).catch(() => []);
 
-  const signalBlock = signals
+  // Semantically rank signals by profile interest if embeddings are available
+  let rankedSignals = signals;
+  if (process.env.OPENAI_API_KEY && signals.length > 0) {
+    try {
+      const rankedIds = await rankSignalsForProfile(
+        profile.id,
+        signals.map((s) => s.id),
+        60
+      );
+      if (rankedIds.length > 0) {
+        const idOrder = new Map(rankedIds.map((id, i) => [id, i]));
+        rankedSignals = [...signals].sort((a, b) => {
+          const aRank = idOrder.get(a.id) ?? signals.length;
+          const bRank = idOrder.get(b.id) ?? signals.length;
+          return aRank - bRank;
+        });
+        console.log(`[agent] semantically ranked ${rankedIds.length} signals for ${profile.name}`);
+      }
+    } catch {
+      // Fall through to unranked signals
+    }
+  }
+
+  const signalBlock = rankedSignals
     .slice(0, 60)
     .map(
       (s, i) =>
@@ -405,6 +472,17 @@ ${digestFormat}`;
       } else if (toolUse.name === "search_related_signals") {
         const result = await handleSearchRelatedSignals(
           input.search_query as string
+        );
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          content: result,
+        });
+      } else if (toolUse.name === "search_signals_semantic") {
+        const result = await handleSearchSignalsSemantic(
+          (input.query || input.search_query) as string,
+          (input.limit as number) || 10,
+          input.region as string | undefined
         );
         toolResults.push({
           type: "tool_result",

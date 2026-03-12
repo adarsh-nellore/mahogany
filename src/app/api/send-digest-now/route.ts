@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       feedParams.push(profile.domains);
       fp++;
     }
-    if (profile.regions?.length) {
+    if (profile.regions?.length && !profile.regions.includes("Global")) {
       feedConditions.push(`(cardinality(regions) = 0 OR regions && $${fp})`);
       feedParams.push(profile.regions);
       fp++;
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: "Digest generated and sent",
       signal_count: signals.length,
-      email_error: sendError ? String(sendError) : null,
+      email_error: sendError ? (sendError.message || JSON.stringify(sendError)) : null,
     });
   } catch (err) {
     console.error("[send-digest-now]", err);
