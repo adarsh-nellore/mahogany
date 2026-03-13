@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Header from "@/components/Header";
-import Breadcrumbs from "@/components/Breadcrumbs";
 import DigestRenderer from "@/components/DigestRenderer";
 
 interface DigestFull {
@@ -21,6 +20,7 @@ function formatEvidenceDate(iso: string): string {
 
 export default function DigestDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [digest, setDigest] = useState<DigestFull | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -41,12 +41,24 @@ export default function DigestDetailPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
-        <Breadcrumbs items={[
-          { label: "Feed", href: "/feed" },
-          { label: "Digest Archive", href: "/digest" },
-          { label: digest ? new Date(digest.sent_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "Loading" },
-        ]} />
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)", fontWeight: 500,
+            color: "var(--color-fg-muted)", padding: 0, marginBottom: "var(--space-5)",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-fg)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--color-fg-muted)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+          </svg>
+          Back to digests
+        </button>
 
         {loading && (
           <div style={{ padding: "var(--space-4) 0" }}>

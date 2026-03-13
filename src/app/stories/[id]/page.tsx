@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import Breadcrumbs from "@/components/Breadcrumbs";
-import { storyImageSvg } from "@/lib/storyImage";
+import { getHeroImage } from "@/lib/heroImages";
 import { isValidSourceUrl } from "@/lib/sourceUrl";
 
 interface FeedStory {
@@ -34,12 +33,12 @@ interface Profile {
 }
 
 const SECTION_COLORS: Record<string, string> = {
-  "Safety & Recalls": "#9E3B1E",
+  "Safety & Recalls": "#862b00",
   "Approvals & Designations": "#3D7A5C",
   "Clinical Trials": "#2E6482",
-  "Guidance & Policy": "#A36A1E",
+  "Guidance & Policy": "#aa5d3d",
   "EU & International": "#6B5CA5",
-  "Standards & Compliance": "#544F4B",
+  "Standards & Compliance": "#6e6b67",
   "Industry & Analysis": "#2E6482",
 };
 
@@ -66,10 +65,7 @@ function freshnessLabel(dateStr: string): { text: string; isNew: boolean } {
 }
 
 function storyImage(story: FeedStory): string {
-  return storyImageSvg(story.section, story.id, 800, 220, {
-    domains: story.domains,
-    therapeutic_areas: story.therapeutic_areas,
-  });
+  return getHeroImage(story.headline + story.section).url;
 }
 
 function canonicalizeSourceUrl(raw: string): string {
@@ -130,6 +126,7 @@ function dedupeSources(story: FeedStory): { url: string; label: string }[] {
 
 export default function StoryDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const [story, setStory] = useState<FeedStory | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -160,7 +157,7 @@ export default function StoryDetailPage() {
     return (
       <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
         <Header />
-        <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
+        <div style={{ maxWidth: 760, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
           <div className="skeleton" style={{ height: 200, borderRadius: "var(--radius-lg)", marginBottom: "var(--space-5)" }} />
           <div className="skeleton-text" style={{ width: "40%", height: 12, marginBottom: "var(--space-3)" }} />
           <div className="skeleton-text" style={{ width: "80%", height: 24, marginBottom: "var(--space-4)" }} />
@@ -212,15 +209,28 @@ export default function StoryDetailPage() {
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
 
-      <article style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-6) var(--space-5)" }}>
-        <Breadcrumbs items={[
-          { label: "Feed", href: "/feed" },
-          { label: story?.section || "Story", href: "/feed" },
-          { label: story ? (story.headline.length > 50 ? story.headline.slice(0, 47) + "\u2026" : story.headline) : "Loading" },
-        ]} />
+      <article style={{ maxWidth: 760, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)", fontWeight: 500,
+            color: "var(--color-fg-muted)", padding: 0, marginBottom: "var(--space-5)",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-fg)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--color-fg-muted)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+          </svg>
+          Back to feed
+        </button>
 
         {/* Hero image */}
-        <div style={{ width: "100%", height: 200, borderRadius: "var(--radius-lg)", marginBottom: "var(--space-5)", overflow: "hidden", background: "var(--color-surface-raised)" }}>
+        <div style={{ width: "100%", height: 240, borderRadius: "var(--radius-xl)", marginBottom: "var(--space-6)", overflow: "hidden", background: "var(--color-surface-raised)" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={storyImage(story)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
 
@@ -249,7 +259,7 @@ export default function StoryDetailPage() {
         </div>
 
         {/* Headline */}
-        <h1 style={{ fontSize: "var(--text-3xl)", fontWeight: "var(--weight-bold)", lineHeight: "var(--leading-tight)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", margin: 0, marginBottom: "var(--space-4)" }}>
+        <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-3xl)", fontWeight: "var(--weight-bold)", lineHeight: "var(--leading-tight)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", margin: 0, marginBottom: "var(--space-5)" }}>
           {story.headline}
         </h1>
 
@@ -276,7 +286,7 @@ export default function StoryDetailPage() {
               <span key={m} style={{
                 fontSize: "var(--text-xs)", fontFamily: "var(--font-sans)", fontWeight: 500,
                 padding: "1px 8px", borderRadius: "var(--radius-full)",
-                background: "var(--color-primary)", color: "#fff",
+                background: "var(--color-primary-solid)", color: "#fff",
               }}>
                 {m}
               </span>
@@ -287,16 +297,16 @@ export default function StoryDetailPage() {
         {/* Summary lede */}
         <p style={{
           fontSize: "var(--text-lg)", color: "var(--color-fg-secondary)",
-          lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-6)",
+          lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-8)",
           fontStyle: "italic",
-          paddingBottom: "var(--space-6)", borderBottom: "1px solid var(--color-border)",
+          paddingBottom: "var(--space-8)", borderBottom: "1px solid var(--color-border)",
         }}>
           {story.summary}
         </p>
 
         {/* Body */}
         <div
-          style={{ fontSize: "var(--text-md)", color: "var(--color-fg)", lineHeight: 1.8, marginBottom: "var(--space-8)" }}
+          style={{ fontSize: "var(--text-base)", color: "var(--color-fg)", lineHeight: 1.85, marginBottom: "var(--space-10)" }}
           dangerouslySetInnerHTML={{ __html: `<p>${renderMarkdown(story.body)}</p>` }}
         />
 

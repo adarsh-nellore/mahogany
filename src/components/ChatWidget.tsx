@@ -17,8 +17,12 @@ function renderMd(md: string): string {
     .replace(/\n/g, "<br/>");
 }
 
+const PANEL_WIDTH = 360;
+
+export { PANEL_WIDTH as CHAT_PANEL_WIDTH };
+
 export default function ChatWidget() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [initialSuggestions, setInitialSuggestions] = useState<string[] | null>(null);
@@ -46,6 +50,17 @@ export default function ChatWidget() {
         .catch(() => setInitialSuggestions(defaultSuggestions));
     }
   }, [open, initialSuggestions]);
+
+  // Dispatch custom event so page layouts can react to open/close
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("copilot-toggle", { detail: { open } }));
+    document.documentElement.style.setProperty("--copilot-width", open ? `${PANEL_WIDTH}px` : "0px");
+  }, [open]);
+
+  // Set initial CSS variable
+  useEffect(() => {
+    document.documentElement.style.setProperty("--copilot-width", `${PANEL_WIDTH}px`);
+  }, []);
 
   const send = useCallback(async (text?: string) => {
     const q = (text ?? input).trim();
@@ -83,37 +98,42 @@ export default function ChatWidget() {
 
   return (
     <>
-      {/* Toggle button */}
+      {/* Toggle button — only when closed */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
           aria-label="Open AI assistant"
           style={{
             position: "fixed", bottom: 24, right: 24, zIndex: 1000,
-            width: 52, height: 52, borderRadius: "50%",
-            background: "var(--color-fg)", color: "var(--color-fg-inverse)",
+            width: 48, height: 48, borderRadius: "50%",
+            background: "var(--color-primary-solid, var(--primary-600))", color: "#fff",
             border: "none", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 4px 20px rgba(26,24,22,0.2), 0 1px 4px rgba(26,24,22,0.1)",
-            transition: "transform 0.2s ease, box-shadow 0.2s ease",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            transition: "transform 0.2s ease",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.08)"; e.currentTarget.style.boxShadow = "0 6px 28px rgba(26,24,22,0.25)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(26,24,22,0.2), 0 1px 4px rgba(26,24,22,0.1)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.08)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         </button>
       )}
 
-      {/* Sidebar panel */}
+      {/* Panel — sits under the header, right edge */}
       <div style={{
-        position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 1100,
-        width: 400,
+        position: "fixed",
+        top: "var(--topbar-height, 56px)",
+        right: 0,
+        bottom: 0,
+        zIndex: 50,
+        width: PANEL_WIDTH,
         transform: open ? "translateX(0)" : "translateX(100%)",
-        transition: "transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)",
-        boxShadow: "none",
-        background: "var(--color-bg)",
+        transition: "transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)",
+        background: "var(--glass-bg, rgba(32, 31, 29, 0.96))",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
         borderLeft: "1px solid var(--color-border)",
         display: "flex", flexDirection: "column",
       }}>
@@ -122,39 +142,40 @@ export default function ChatWidget() {
           height: 52, padding: "0 16px",
           borderBottom: "1px solid var(--color-border)",
           display: "flex", alignItems: "center", gap: 10,
-          background: "var(--color-bg)", flexShrink: 0,
+          flexShrink: 0,
         }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: "var(--radius-full)",
-            background: "var(--color-fg)", color: "var(--color-fg-inverse)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 11, fontWeight: 700, fontFamily: "var(--font-sans)", flexShrink: 0,
-          }}>M</div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary, var(--primary-500))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+          </svg>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, fontFamily: "var(--font-sans)", color: "var(--color-fg)" }}>
+            <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, fontFamily: "var(--font-sans)", color: "var(--color-fg)", letterSpacing: "0.01em" }}>
+              Copilot
+            </div>
+            <div style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
               Mahogany AI
             </div>
           </div>
           <button onClick={() => { setOpen(false); setInitialSuggestions(null); }} aria-label="Close"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-fg-muted)", padding: 4, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-md)" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-fg-muted)", padding: 4, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-md)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-fg)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--color-fg-muted)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
 
         {/* Messages */}
-        <div ref={scrollRef} style={{
-          flex: 1, overflowY: "auto", padding: "20px 16px",
-          display: "flex", flexDirection: "column", gap: 14,
+        <div ref={scrollRef} className="hide-scrollbar" style={{
+          flex: 1, overflowY: "auto", padding: "16px 14px",
+          display: "flex", flexDirection: "column", gap: 12,
         }}>
           {/* Empty state */}
           {messages.length === 0 && !loading && (
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", gap: 16, padding: "0 8px" }}>
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", gap: 14, padding: "0 4px" }}>
               <div style={{ textAlign: "center" }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-fg-placeholder)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 12px" }}>
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
                 <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", lineHeight: 1.5, margin: 0 }}>
                   Ask about today&apos;s regulatory developments, compare policies, or get quick answers.
                 </p>
@@ -165,11 +186,11 @@ export default function ChatWidget() {
                     style={{
                       fontSize: "var(--text-xs)", fontFamily: "var(--font-sans)", color: "var(--color-fg-secondary)",
                       background: "var(--color-surface-raised)", border: "1px solid var(--color-border)",
-                      borderRadius: "var(--radius-md)", padding: "10px 14px",
-                      cursor: "pointer", textAlign: "left", transition: "border-color 0.1s ease, background 0.1s ease",
+                      borderRadius: "var(--radius-md)", padding: "10px 12px",
+                      cursor: "pointer", textAlign: "left", transition: "border-color 0.1s ease",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; e.currentTarget.style.background = "var(--color-bg)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.background = "var(--color-surface-raised)"; }}>
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-border-strong)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}>
                     {s}
                   </button>
                 ))}
@@ -179,22 +200,26 @@ export default function ChatWidget() {
 
           {/* Message bubbles */}
           {messages.map((msg, i) => (
-            <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+            <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", gap: 8 }}>
               {msg.role === "assistant" && (
                 <div style={{
-                  width: 24, height: 24, borderRadius: "var(--radius-full)", flexShrink: 0, marginRight: 8, marginTop: 2,
-                  background: "var(--color-fg)", color: "var(--color-fg-inverse)",
+                  width: 22, height: 22, borderRadius: "var(--radius-full)", flexShrink: 0, marginTop: 2,
+                  background: "var(--color-primary-subtle)", color: "var(--color-primary)",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 9, fontWeight: 700, fontFamily: "var(--font-sans)",
-                }}>M</div>
+                }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+                  </svg>
+                </div>
               )}
               <div style={{
-                maxWidth: "80%", padding: "10px 14px",
-                borderRadius: msg.role === "user" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                background: msg.role === "user" ? "var(--color-fg)" : "var(--color-surface-raised)",
-                color: msg.role === "user" ? "var(--color-fg-inverse)" : "var(--color-fg)",
-                fontSize: "var(--text-sm)", lineHeight: 1.6,
-                fontFamily: msg.role === "user" ? "var(--font-sans)" : "var(--font-serif)",
+                maxWidth: "82%", padding: "8px 12px",
+                borderRadius: msg.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                background: msg.role === "user" ? "var(--color-primary-solid, var(--primary-600))" : "var(--color-surface-raised)",
+                color: msg.role === "user" ? "#fff" : "var(--color-fg)",
+                fontSize: "var(--text-sm)", lineHeight: 1.55,
+                fontFamily: "var(--font-sans)",
               }}>
                 {msg.role === "assistant" ? (
                   <span dangerouslySetInnerHTML={{ __html: renderMd(msg.content) }} />
@@ -207,12 +232,15 @@ export default function ChatWidget() {
           {loading && (
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{
-                width: 24, height: 24, borderRadius: "var(--radius-full)", flexShrink: 0,
-                background: "var(--color-fg)", color: "var(--color-fg-inverse)",
+                width: 22, height: 22, borderRadius: "var(--radius-full)", flexShrink: 0,
+                background: "var(--color-primary-subtle)", color: "var(--color-primary)",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 9, fontWeight: 700, fontFamily: "var(--font-sans)",
-              }}>M</div>
-              <div style={{ padding: "10px 14px", borderRadius: "14px 14px 14px 4px", background: "var(--color-surface-raised)", display: "flex", gap: 5 }}>
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </div>
+              <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 4px", background: "var(--color-surface-raised)", display: "flex", gap: 5 }}>
                 <span className="chat-dot" style={{ animationDelay: "0ms" }} />
                 <span className="chat-dot" style={{ animationDelay: "200ms" }} />
                 <span className="chat-dot" style={{ animationDelay: "400ms" }} />
@@ -220,21 +248,21 @@ export default function ChatWidget() {
             </div>
           )}
 
-          {/* Suggestion pills — shown after every assistant response */}
+          {/* Suggestion pills */}
           {!loading && suggestions.length > 0 && messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingLeft: 32, marginTop: 2 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingLeft: 30, marginTop: 2 }}>
               {suggestions.map((s, i) => (
                 <button key={i} onClick={() => send(s)}
                   style={{
                     fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", color: "var(--color-primary)",
-                    background: "var(--color-primary-subtle, rgba(158,59,30,0.06))",
-                    border: "1px solid var(--color-primary-muted, rgba(158,59,30,0.15))",
-                    borderRadius: "var(--radius-full)", padding: "5px 12px",
-                    cursor: "pointer", transition: "background 0.15s ease, border-color 0.15s ease",
+                    background: "var(--color-primary-subtle)",
+                    border: "1px solid var(--color-primary-muted)",
+                    borderRadius: "var(--radius-full)", padding: "4px 10px",
+                    cursor: "pointer", transition: "background 0.15s ease",
                     whiteSpace: "nowrap",
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(158,59,30,0.1)"; e.currentTarget.style.borderColor = "rgba(158,59,30,0.25)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-primary-subtle, rgba(158,59,30,0.06))"; e.currentTarget.style.borderColor = "var(--color-primary-muted, rgba(158,59,30,0.15))"; }}>
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(134, 43, 0, 0.2)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--color-primary-subtle)"; }}>
                   {s}
                 </button>
               ))}
@@ -243,15 +271,15 @@ export default function ChatWidget() {
         </div>
 
         {/* Input */}
-        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--color-border)", background: "var(--color-bg)", flexShrink: 0 }}>
+        <div style={{ padding: "10px 14px", borderTop: "1px solid var(--color-border)", flexShrink: 0 }}>
           <form onSubmit={(e) => { e.preventDefault(); send(); }} style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your briefing..."
               disabled={loading}
               style={{
-                flex: 1, padding: "10px 14px", fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)",
+                flex: 1, padding: "9px 12px", fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)",
                 border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)",
-                background: "var(--color-bg)", color: "var(--color-fg)", outline: "none",
+                background: "var(--color-surface)", color: "var(--color-fg)", outline: "none",
                 transition: "border-color 0.15s ease",
               }}
               onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-border-focus)"; }}
@@ -259,14 +287,14 @@ export default function ChatWidget() {
             />
             <button type="submit" disabled={loading || !input.trim()}
               style={{
-                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                background: input.trim() ? "var(--color-fg)" : "var(--color-surface-raised)",
-                color: input.trim() ? "var(--color-fg-inverse)" : "var(--color-fg-muted)",
+                width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                background: input.trim() ? "var(--color-primary-solid, var(--primary-600))" : "var(--color-surface-raised)",
+                color: input.trim() ? "#fff" : "var(--color-fg-muted)",
                 border: "none", cursor: input.trim() ? "pointer" : "default",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 transition: "background 0.15s ease",
               }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
               </svg>
             </button>
@@ -276,7 +304,7 @@ export default function ChatWidget() {
 
       <style>{`
         .chat-dot {
-          width: 6px; height: 6px; border-radius: 50%;
+          width: 5px; height: 5px; border-radius: 50%;
           background: var(--color-fg-muted);
           animation: chatPulse 1.2s infinite;
         }

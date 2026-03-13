@@ -5,6 +5,7 @@ import Link from "next/link";
 import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
 import { REGION_OPTIONS, PRODUCT_CODE_OPTIONS } from "@/lib/feedFilters";
 import Header from "@/components/Header";
+import { getHeroImage } from "@/lib/heroImages";
 
 interface FeedStory {
   id: string;
@@ -56,11 +57,18 @@ interface ProductSearchResult {
   source: string;
 }
 
+function severityAccentColor(severity: string): string {
+  const s = (severity || "low").toLowerCase();
+  if (s === "high") return "var(--color-danger)";
+  if (s === "medium") return "var(--color-warning)";
+  return "var(--color-info)";
+}
+
 // Deterministic color assignment for dynamic AI-generated sections
 const SECTION_PALETTE = [
-  "#9E3B1E", "#3D7A5C", "#2E6482", "#A36A1E",
-  "#6B5CA5", "#544F4B", "#8B4513", "#2F4F4F",
-  "#6A5ACD", "#B8860B", "#556B2F", "#4682B4",
+  "#862b00", "#4ade80", "#60a5fa", "#f0a83a",
+  "#a78bfa", "#aca8a3", "#c27f67", "#22d3ee",
+  "#c084fc", "#eab308", "#2dd4bf", "#38bdf8",
 ];
 function sectionColor(section: string): string {
   let hash = 0;
@@ -133,6 +141,52 @@ function storyIcon(_section: string): string {
   return "•";
 }
 
+/** Hero image for news cards: uses curated Unsplash images with a gradient overlay fallback. */
+function StoryImage({ story, size = "medium" }: { story: FeedStory; size?: "lead" | "medium" }) {
+  const heroImage = getHeroImage(story.headline + story.section);
+  const base = sectionColor(story.section);
+  const height = size === "lead" ? 200 : 140;
+  const [imgError, setImgError] = useState(false);
+  return (
+    <div
+      style={{
+        height,
+        minHeight: height,
+        borderRadius: "var(--radius-md)",
+        position: "relative",
+        overflow: "hidden",
+        background: `linear-gradient(135deg, ${base}30 0%, ${base}10 50%, var(--surface-850) 100%)`,
+      }}
+      aria-hidden
+    >
+      {!imgError && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={heroImage.url}
+          alt={heroImage.alt}
+          loading="lazy"
+          onError={() => setImgError(true)}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            borderRadius: "var(--radius-md)",
+            display: "block",
+          }}
+        />
+      )}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(135deg, ${base}33 0%, transparent 60%)`,
+          borderRadius: "var(--radius-md)",
+        }}
+      />
+    </div>
+  );
+}
+
 function FilterChipRow({
   label,
   items,
@@ -150,7 +204,7 @@ function FilterChipRow({
 }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-      <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginRight: 4, flexShrink: 0 }}>{label}</span>
+      {label && <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginRight: 2, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</span>}
       {items.map((item) => {
         const key = toKey(item);
         const isActive = active.has(key);
@@ -161,12 +215,13 @@ function FilterChipRow({
             type="button"
             onClick={() => onToggle(key)}
             style={{
-              padding: "4px 10px", borderRadius: "var(--radius-full)",
+              padding: "4px 12px", borderRadius: "var(--radius-full)",
               fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
-              background: isActive ? "var(--color-primary-subtle)" : "var(--color-surface)",
-              color: isActive ? "var(--color-primary)" : "var(--color-fg-muted)",
-              border: isActive ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+              background: isActive ? "var(--color-primary-subtle)" : "transparent",
+              color: isActive ? "var(--color-primary)" : "var(--color-fg-secondary)",
+              border: isActive ? "1px solid var(--color-primary)" : "1px solid var(--color-border)",
               fontFamily: "var(--font-sans)",
+              transition: "all 0.15s ease",
             }}
           >
             {display}
@@ -195,6 +250,9 @@ export default function FeedPage() {
   const [activeRegions, setActiveRegions] = useState<Set<string>>(new Set());
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set());
   const [activeProductCodes, setActiveProductCodes] = useState<Set<string>>(new Set());
+
+  // Time period filter: "7" | "14" | "30" | "90" | "all"
+  const [timePeriod, setTimePeriod] = useState<string>("30");
 
   // Product filter state
   const [watchedProducts, setWatchedProducts] = useState<WatchItem[]>([]);
@@ -252,6 +310,7 @@ export default function FeedPage() {
       params.set("therapeutic_areas", tas.join(","));
     }
     if (activeProductCodes.size > 0) params.set("product_codes", [...activeProductCodes].join(","));
+    if (timePeriod !== "all") params.set("since_days", timePeriod);
     try {
       const res = await fetch(`/api/feed/stories?${params}`);
       const data = await res.json();
@@ -259,7 +318,7 @@ export default function FeedPage() {
       setTotal(data.total || 0);
     } catch { /* ignore */ }
     setLoading(false);
-  }, [activeRegions, activeDomains, activeTAs, activeProductCodes, expandTA]);
+  }, [activeRegions, activeDomains, activeTAs, activeProductCodes, timePeriod, expandTA]);
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
 
@@ -398,6 +457,20 @@ export default function FeedPage() {
 
   const [lastUpdated] = useState(() => new Date());
 
+  // Derive insights from stories
+  const insights = !loading && stories.length > 0 ? (() => {
+    const bySeverity = { high: 0, medium: 0, low: 0 };
+    const byRegion = new Map<string, number>();
+    for (const s of stories) {
+      const sev = (s.severity || "low").toLowerCase();
+      bySeverity[sev === "high" ? "high" : sev === "medium" ? "medium" : "low"]++;
+      for (const r of s.regions || []) {
+        byRegion.set(r, (byRegion.get(r) || 0) + 1);
+      }
+    }
+    return { bySeverity, byRegion: Array.from(byRegion.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4) };
+  })() : null;
+
   // Filter stories by active product pills
   const filteredStories = activeProductFilters.size > 0
     ? stories.filter((s) => {
@@ -408,319 +481,303 @@ export default function FeedPage() {
       })
     : stories;
 
-  const hero = filteredStories[0];
-  const secondary = filteredStories.slice(1, 3);
-  const sections = groupBySection(filteredStories.slice(3));
+  // Snapshot view filter: "all" | "high" | section name
+  const [snapshotView, setSnapshotView] = useState<"all" | "high" | string>("all");
+  const sectionCounts = (() => {
+    const m = new Map<string, number>();
+    for (const s of filteredStories) {
+      const sec = s.section || "Regulatory Updates";
+      m.set(sec, (m.get(sec) || 0) + 1);
+    }
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  })();
+  const displayStories = (() => {
+    if (snapshotView === "all") return filteredStories;
+    if (snapshotView === "high") return filteredStories.filter((s) => (s.severity || "").toLowerCase() === "high");
+    if (snapshotView === "medium-sev") return filteredStories.filter((s) => (s.severity || "").toLowerCase() === "medium");
+    if (snapshotView === "low-sev") return filteredStories.filter((s) => (s.severity || "").toLowerCase() === "low");
+    if (snapshotView.startsWith("region-")) {
+      const region = snapshotView.slice(7);
+      return filteredStories.filter((s) => s.regions.some((r) => r === region));
+    }
+    return filteredStories.filter((s) => (s.section || "Regulatory Updates") === snapshotView);
+  })();
+
+  // Date range string for snapshot tags — derived from selected time period (accurate)
+  const dateRangeStr = (() => {
+    if (timePeriod === "all") return "All time";
+    const days = parseInt(timePeriod, 10);
+    const now = new Date();
+    const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${fmt(from)} – ${fmt(now)}`;
+  })();
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
 
-      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "var(--space-5) var(--space-6) var(--space-8)" }}>
-        {/* ── Masthead: evidence date first, then briefing date ── */}
-        <div style={{ marginBottom: "var(--space-4)" }}>
-          <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", margin: 0, lineHeight: "var(--leading-tight)" }}>
-            {profile ? `${profile.name.split(" ")[0]}\u2019s Briefing` : "Regulatory Briefing"}
-          </h1>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 4 }}>
-            {stories.length > 0 && (() => {
-              const dates = stories.map((s) => new Date(s.published_at).getTime());
-              const minD = new Date(Math.min(...dates));
-              const maxD = new Date(Math.max(...dates));
-              const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-              const rangeStr = minD.getTime() === maxD.getTime() ? fmt(minD) : `${fmt(minD)} – ${fmt(maxD)}`;
-              return (
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--color-fg)", fontFamily: "var(--font-sans)", fontWeight: 500 }}>
-                  Evidence from {rangeStr}
-                </span>
-              );
-            })()}
-            <span style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
-              Briefing for {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-              {total > 0 && ` · ${total} stories`}
-            </span>
-          </div>
-        </div>
+      {/* ── 2-COLUMN GRID: Sidebar + Main ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", padding: "var(--space-6) var(--space-6) var(--space-16)", paddingRight: "calc(var(--copilot-width, 360px) + var(--space-6))", gap: "var(--space-6)", transition: "padding-right 0.25s ease" }}>
 
-        {/* ── Search bar — full width, prominent ── */}
-        <form onSubmit={(e) => { e.preventDefault(); handleSemanticSearch(searchInput); }}
-          style={{ marginBottom: "var(--space-3)" }}>
-          <div style={{ position: "relative" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", opacity: 0.45, pointerEvents: "none" }}>
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input value={searchInput}
-              onChange={(e) => handleSearchInputChange(e.target.value)}
-              placeholder="Search your briefing — ask anything..."
-              style={{
-                width: "100%", fontSize: "var(--text-base)", padding: "12px 100px 12px 42px",
-                fontFamily: "var(--font-sans)", color: "var(--color-fg)",
-                border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)",
-                background: "var(--color-surface)", outline: "none",
-                transition: "border-color 0.2s ease",
-                boxSizing: "border-box",
-              }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-border-focus)"; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
-            />
-            <button
-              type="submit"
-              style={{
-                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "6px 12px", borderRadius: "var(--radius-md)",
-                background: "var(--color-fg)", color: "var(--color-fg-inverse)",
-                border: "none", cursor: "pointer",
-                fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "0.02em",
-              }}
-            >
-              {searchMode === "searching" ? (
-                <span style={{ width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "searchSpin 0.6s linear infinite" }} />
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              )}
-              Search
-            </button>
-          </div>
-        </form>
-
-        {/* ── Filter chips: chip state overrides profile; deselect all = broad feed ── */}
-        {profile && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: "var(--space-4)" }}>
-            <FilterChipRow
-              label="Therapeutic areas"
-              items={[...THERAPEUTIC_AREAS]}
-              active={activeTAs}
-              onToggle={(key) => {
-                setActiveTAs((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(key)) next.delete(key);
-                  else next.add(key);
-                  return next;
-                });
-                setTimeout(() => fetchStories(), 0);
-              }}
-              toKey={(x) => x.toLowerCase().trim()}
-            />
-            <FilterChipRow
-              label="Markets"
-              items={REGION_OPTIONS.map((r) => r.id)}
-              labels={Object.fromEntries(REGION_OPTIONS.map((r) => [r.id, r.label]))}
-              active={activeRegions}
-              onToggle={(key) => {
-                setActiveRegions((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(key)) next.delete(key);
-                  else next.add(key);
-                  return next;
-                });
-                setTimeout(() => fetchStories(), 0);
-              }}
-              toKey={(x) => x}
-            />
-            <FilterChipRow
-              label="Domains"
-              items={["devices", "pharma"]}
-              labels={{ devices: "Medical Devices", pharma: "Pharma & Biologics" }}
-              active={activeDomains}
-              onToggle={(key) => {
-                setActiveDomains((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(key)) next.delete(key);
-                  else next.add(key);
-                  return next;
-                });
-                setTimeout(() => fetchStories(), 0);
-              }}
-              toKey={(x) => x}
-            />
-            <FilterChipRow
-              label="Product codes"
-              items={[...PRODUCT_CODE_OPTIONS]}
-              active={activeProductCodes}
-              onToggle={(key) => {
-                setActiveProductCodes((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(key)) next.delete(key);
-                  else next.add(key);
-                  return next;
-                });
-                setTimeout(() => fetchStories(), 0);
-              }}
-              toKey={(x) => x}
-            />
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const profileTAs = (profile.therapeutic_areas || []).map((t: string) => {
-                    const low = t.toLowerCase().trim();
-                    const match = THERAPEUTIC_AREAS.find((ta) => ta.toLowerCase() === low);
-                    return match ? match.toLowerCase() : low;
-                  });
-                  setActiveTAs(new Set(profileTAs));
-                  setActiveRegions(new Set(profile.regions || []));
-                  setActiveDomains(new Set(profile.domains || []));
-                  setActiveProductCodes(new Set());
-                  setTimeout(() => fetchStories(), 0);
-                }}
-                style={{
-                  fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)",
-                  color: "var(--color-fg-muted)", background: "none", border: "none", cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                Reset to profile
-              </button>
+        {/* ── LEFT SIDEBAR: Filters + Watched Products ── */}
+        <aside className="hide-scrollbar" style={{ position: "sticky", top: "calc(var(--topbar-height) + var(--space-6))", alignSelf: "start", maxHeight: "calc(100vh - var(--topbar-height) - var(--space-12))", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+          {/* Time period filter — always visible */}
+          <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+            <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Time Period</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {[{ key: "7", label: "7 days" }, { key: "14", label: "14 days" }, { key: "30", label: "30 days" }, { key: "90", label: "90 days" }, { key: "all", label: "All time" }].map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { setTimePeriod(key); setTimeout(() => fetchStories(), 0); }}
+                  style={{
+                    padding: "4px 12px", borderRadius: "var(--radius-full)",
+                    fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
+                    background: timePeriod === key ? "var(--color-primary-subtle)" : "transparent",
+                    color: timePeriod === key ? "var(--color-primary)" : "var(--color-fg-secondary)",
+                    border: timePeriod === key ? "1px solid var(--color-primary)" : "1px solid var(--color-border)",
+                    fontFamily: "var(--font-sans)", transition: "all 0.15s ease",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-        )}
 
-        {/* ── Product filter pills ── */}
-        {watchedProducts.length > 0 && (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: "var(--space-4)" }}>
-            <button
-              type="button"
-              onClick={clearProductFilters}
-              style={{
-                padding: "4px 10px", borderRadius: "var(--radius-full)",
-                fontSize: "var(--text-xs)", fontWeight: 600, cursor: "pointer",
-                background: activeProductFilters.size === 0 ? "var(--color-fg)" : "var(--color-surface)",
-                color: activeProductFilters.size === 0 ? "var(--color-fg-inverse)" : "var(--color-fg-muted)",
-                border: activeProductFilters.size === 0 ? "none" : "1px solid var(--color-border)",
-                fontFamily: "var(--font-sans)",
-              }}
-            >
-              All
-            </button>
-            {watchedProducts.map((wp) => {
-              const isActive = activeProductFilters.has(wp.entity_id);
-              const isOwn = wp.watch_type === "exact";
-              return (
-                <span key={wp.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  <button
-                    type="button"
-                    onClick={() => toggleProductFilter(wp.entity_id)}
-                    style={{
-                      padding: "4px 10px", borderRadius: "var(--radius-full)",
-                      fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
-                      background: isActive
-                        ? (isOwn ? "var(--color-primary-subtle)" : "var(--color-surface-raised)")
-                        : "var(--color-surface)",
-                      color: isActive
-                        ? (isOwn ? "var(--color-primary)" : "var(--color-fg)")
-                        : "var(--color-fg-muted)",
-                      border: isActive
-                        ? (isOwn ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border-strong)")
-                        : "1px solid var(--color-border)",
-                      fontFamily: "var(--font-sans)",
-                    }}
-                  >
-                    {wp.canonical_name}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeProductFromFeed(wp)}
-                    title="Remove product"
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "var(--color-fg-placeholder)", fontSize: 12, lineHeight: 1, padding: 0,
-                    }}
-                  >
-                    &times;
-                  </button>
-                </span>
-              );
-            })}
-            <div style={{ position: "relative", display: "flex", gap: 6, alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={clearAllWatchItems}
-                title="Clear all tracked products"
-                style={{
-                  padding: "4px 8px", borderRadius: "var(--radius-full)",
-                  fontSize: "var(--text-2xs)", fontWeight: 600, cursor: "pointer",
-                  background: "none", border: "1px solid var(--color-border)",
-                  color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)",
-                }}
-              >
-                Clear all
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowProductSearch((v) => !v)}
-                style={{
-                  width: 24, height: 24, borderRadius: "var(--radius-full)",
-                  background: "var(--color-surface)", border: "1px solid var(--color-border)",
-                  color: "var(--color-fg-muted)", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 14, fontWeight: 600, lineHeight: 1,
-                }}
-                title="Add product"
-              >
-                +
-              </button>
-              {showProductSearch && (
-                <div style={{
-                  position: "absolute", top: 30, left: 0, zIndex: 20,
-                  width: 320, background: "var(--color-surface)", border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  padding: 8,
-                }}>
-                  <input
-                    className="input"
-                    value={productSearchInput}
-                    onChange={(e) => handleProductSearchInputChange(e.target.value)}
-                    placeholder="Search products..."
-                    autoFocus
-                    style={{ width: "100%", padding: 8, fontSize: "var(--text-sm)", marginBottom: 4 }}
-                  />
-                  {searchingNewProduct && (
-                    <div style={{ padding: 8, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)" }}>Searching…</div>
-                  )}
-                  {productSearchResults.map((p, i) => (
-                    <div key={`${p.name}-${i}`} style={{
-                      padding: "6px 8px", borderBottom: "1px solid var(--color-border)",
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                    }}>
-                      <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg)", flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600 }}>{p.name}</div>
-                        {p.company && <div style={{ color: "var(--color-fg-muted)" }}>{p.company}</div>}
-                      </div>
-                      <div style={{ display: "flex", gap: 4, flexShrink: 0, marginLeft: 4 }}>
-                        <button type="button" onClick={() => addProductFromFeed(p, "exact")}
-                          style={{ fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-sm)", background: "var(--color-primary-subtle)", color: "var(--color-primary)", border: "1px solid var(--color-primary-muted)", cursor: "pointer" }}>
-                          Mine
-                        </button>
-                        <button type="button" onClick={() => addProductFromFeed(p, "competitor")}
-                          style={{ fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-sm)", background: "var(--color-surface-raised)", color: "var(--color-fg-muted)", border: "1px solid var(--color-border)", cursor: "pointer" }}>
-                          Comp
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+          {/* Filter blocks — each category in its own container */}
+          {profile && (
+            <>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Therapeutic Areas</span>
+                  <button type="button" onClick={() => {
+                    const pt = (profile.therapeutic_areas || []).map((t: string) => { const l = t.toLowerCase().trim(); const m = THERAPEUTIC_AREAS.find((a) => a.toLowerCase() === l); return m ? m.toLowerCase() : l; });
+                    setActiveTAs(new Set(pt)); setActiveRegions(new Set(profile.regions || [])); setActiveDomains(new Set(profile.domains || [])); setActiveProductCodes(new Set());
+                    setTimeout(() => fetchStories(), 0);
+                  }} style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "var(--font-sans)" }}>Reset all</button>
                 </div>
-              )}
+                <FilterChipRow label="" items={[...THERAPEUTIC_AREAS]} active={activeTAs} onToggle={(key) => { setActiveTAs((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; }); setTimeout(() => fetchStories(), 0); }} toKey={(x) => x.toLowerCase().trim()} />
+              </div>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Markets</span>
+                <FilterChipRow label="" items={REGION_OPTIONS.map((r) => r.id)} labels={Object.fromEntries(REGION_OPTIONS.map((r) => [r.id, r.label]))} active={activeRegions} onToggle={(key) => { setActiveRegions((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; }); setTimeout(() => fetchStories(), 0); }} toKey={(x) => x} />
+              </div>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Domains</span>
+                <FilterChipRow label="" items={["devices", "pharma"]} labels={{ devices: "Medical Devices", pharma: "Pharma & Biologics" }} active={activeDomains} onToggle={(key) => { setActiveDomains((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; }); setTimeout(() => fetchStories(), 0); }} toKey={(x) => x} />
+              </div>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Product Codes</span>
+                <FilterChipRow label="" items={[...PRODUCT_CODE_OPTIONS]} active={activeProductCodes} onToggle={(key) => { setActiveProductCodes((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; }); setTimeout(() => fetchStories(), 0); }} toKey={(x) => x} />
+              </div>
+            </>
+          )}
+
+          {/* Watched products block */}
+          <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+            <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Watched Products</span>
+            {watchedProducts.length > 0 && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                {watchedProducts.map((wp) => (
+                  <span key={wp.id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    <button type="button" onClick={() => toggleProductFilter(wp.entity_id)} style={{
+                      padding: "3px 8px", borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-2xs)", fontWeight: 500, cursor: "pointer",
+                      background: activeProductFilters.has(wp.entity_id) ? "var(--color-primary-subtle)" : "transparent",
+                      color: activeProductFilters.has(wp.entity_id) ? "var(--color-primary)" : "var(--color-fg-muted)",
+                      border: activeProductFilters.has(wp.entity_id) ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+                      fontFamily: "var(--font-sans)",
+                    }}>{wp.canonical_name}</button>
+                    <button type="button" onClick={() => removeProductFromFeed(wp)} title="Remove" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-fg-placeholder)", fontSize: 10, padding: 0 }}>&times;</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <button type="button" onClick={() => setShowProductSearch((v) => !v)} style={{
+              fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+              padding: "4px 10px", borderRadius: "var(--radius-full)",
+              background: "transparent", color: "var(--color-fg-muted)",
+              border: "1px solid var(--color-border)", alignSelf: "flex-start",
+            }}>+ Add product</button>
+            {showProductSearch && (
+              <div style={{ position: "relative", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: 8 }}>
+                <input className="input" value={productSearchInput} onChange={(e) => handleProductSearchInputChange(e.target.value)} placeholder="Search products..." autoFocus style={{ width: "100%", padding: 8, fontSize: "var(--text-sm)", marginBottom: 4 }} />
+                {searchingNewProduct && <div style={{ padding: 8, fontSize: "var(--text-xs)", color: "var(--color-fg-muted)" }}>Searching…</div>}
+                {productSearchResults.map((p, i) => (
+                  <div key={`${p.name}-${i}`} style={{ padding: "6px 8px", borderBottom: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: "var(--text-xs)", flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600 }}>{p.name}</div>{p.company && <div style={{ color: "var(--color-fg-muted)" }}>{p.company}</div>}</div>
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button type="button" onClick={() => addProductFromFeed(p, "exact")} style={{ fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-sm)", background: "var(--color-primary-subtle)", color: "var(--color-primary)", border: "1px solid var(--color-primary-muted)", cursor: "pointer" }}>Mine</button>
+                      <button type="button" onClick={() => addProductFromFeed(p, "competitor")} style={{ fontSize: "var(--text-2xs)", padding: "2px 6px", borderRadius: "var(--radius-sm)", background: "var(--color-surface-raised)", color: "var(--color-fg-muted)", border: "1px solid var(--color-border)", cursor: "pointer" }}>Comp</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* ── MAIN CONTENT ── */}
+        <main style={{ maxWidth: 960, margin: "0 auto", width: "100%" }}>
+          {/* Heading */}
+          <div style={{ marginBottom: "var(--space-6)" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--space-4)" }}>
+              <div>
+                <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", margin: 0, lineHeight: "var(--leading-tight)" }}>
+                  {profile ? `${profile.name.split(" ")[0]}\u2019s Briefing` : "Regulatory Briefing"}
+                </h1>
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginTop: 6, fontFamily: "var(--font-sans)" }}>
+                  {dateRangeStr}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating || loading}
+                title="Regenerate feed with latest signals and current filters"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+                  padding: "8px 14px", borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-xs)", fontWeight: 600, cursor: generating || loading ? "not-allowed" : "pointer",
+                  background: "var(--color-surface-raised)", color: generating || loading ? "var(--color-fg-muted)" : "var(--color-fg)",
+                  border: "1px solid var(--color-border)", fontFamily: "var(--font-sans)",
+                  transition: "all 0.15s ease", opacity: generating || loading ? 0.6 : 1,
+                }}
+              >
+                <svg
+                  width="13" height="13" viewBox="0 0 16 16" fill="none"
+                  style={{ animation: generating ? "spin 1s linear infinite" : "none" }}
+                >
+                  <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M8 1l2.5 2L8 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {generating ? "Regenerating…" : "Deep refresh"}
+              </button>
             </div>
           </div>
-        )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-5)" }}>
-          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", margin: 0 }}>
-            Filters override profile when selected. Deselect all for a broader view. Changes here don&apos;t save to your profile.
-          </p>
-          {!loading && stories.length > 0 && (
-            <span className="last-updated">
-              Last updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-            </span>
+          {/* Search bar — bigger */}
+          <form onSubmit={(e) => { e.preventDefault(); handleSemanticSearch(searchInput); }} style={{ marginBottom: "var(--space-6)" }}>
+            <div style={{ position: "relative" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-fg-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", opacity: 0.5, pointerEvents: "none" }}>
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input value={searchInput} onChange={(e) => handleSearchInputChange(e.target.value)}
+                placeholder="Ask about today's stories..."
+                style={{
+                  width: "100%", fontSize: "var(--text-md)", padding: "16px 56px 16px 52px",
+                  fontFamily: "var(--font-sans)", color: "var(--color-fg)",
+                  border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)",
+                  background: "var(--surface-800)", outline: "none", boxSizing: "border-box",
+                  transition: "border-color 0.2s ease",
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-border-focus)"; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; }}
+              />
+              <button type="submit"
+                style={{
+                  position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: searchInput.trim() ? "var(--color-primary-solid)" : "transparent",
+                  color: searchInput.trim() ? "#fff" : "var(--color-fg-muted)",
+                  border: "none", cursor: searchInput.trim() ? "pointer" : "default",
+                  transition: "background 0.15s ease",
+                }}>
+                {searchMode === "searching" ? (
+                  <span style={{ width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "searchSpin 0.6s linear infinite" }} />
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Snapshot tags row — inline, no wrapper card */}
+          {(insights || stories.length > 0) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: "var(--space-6)", alignItems: "center" }}>
+              {dateRangeStr && (
+                <button type="button" onClick={() => setSnapshotView("all")} style={{
+                  fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                  padding: "3px 10px", borderRadius: "var(--radius-full)",
+                  background: snapshotView === "all" ? "var(--color-primary-subtle)" : "var(--surface-800)",
+                  color: snapshotView === "all" ? "var(--color-primary)" : "var(--color-fg-muted)",
+                  border: snapshotView === "all" ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+                  fontWeight: snapshotView === "all" ? 600 : 400,
+                }}>
+                  {dateRangeStr}
+                </button>
+              )}
+              {insights && (
+                <>
+                  <button type="button" onClick={() => setSnapshotView(snapshotView === "high" ? "all" : "high")} style={{
+                    fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                    padding: "3px 10px", borderRadius: "var(--radius-full)", border: "none",
+                    background: snapshotView === "high" ? "rgba(224,84,84,0.2)" : "rgba(224,84,84,0.1)",
+                    color: "var(--color-danger)", fontWeight: snapshotView === "high" ? 600 : 400,
+                  }}>
+                    {insights.bySeverity.high} high
+                  </button>
+                  <button type="button" onClick={() => setSnapshotView(snapshotView === "medium-sev" ? "all" : "medium-sev")} style={{
+                    fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                    padding: "3px 10px", borderRadius: "var(--radius-full)", border: "none",
+                    background: "rgba(240,168,58,0.1)", color: "var(--color-warning)",
+                  }}>
+                    {insights.bySeverity.medium} med
+                  </button>
+                  <button type="button" onClick={() => setSnapshotView(snapshotView === "low-sev" ? "all" : "low-sev")} style={{
+                    fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                    padding: "3px 10px", borderRadius: "var(--radius-full)", border: "none",
+                    background: "rgba(90,156,245,0.08)", color: "var(--color-info)",
+                  }}>
+                    {insights.bySeverity.low} low
+                  </button>
+                  {insights.byRegion.slice(0, 3).map(([r, n]) => (
+                    <button key={r} type="button" onClick={() => setSnapshotView(snapshotView === `region-${r}` ? "all" : `region-${r}`)} style={{
+                      fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                      padding: "3px 10px", borderRadius: "var(--radius-full)",
+                      background: snapshotView === `region-${r}` ? "var(--color-primary-subtle)" : "var(--surface-800)",
+                      color: snapshotView === `region-${r}` ? "var(--color-primary)" : "var(--color-fg-muted)",
+                      border: snapshotView === `region-${r}` ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+                      fontWeight: snapshotView === `region-${r}` ? 600 : 400,
+                    }}>
+                      {r}: {n}
+                    </button>
+                  ))}
+                </>
+              )}
+              {sectionCounts.map(([sec, n]) => (
+                <button key={sec} type="button" onClick={() => setSnapshotView(snapshotView === sec ? "all" : sec)} style={{
+                  fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                  padding: "3px 10px", borderRadius: "var(--radius-full)",
+                  background: snapshotView === sec ? "var(--color-primary-subtle)" : "var(--surface-800)",
+                  color: snapshotView === sec ? "var(--color-primary)" : "var(--color-fg-muted)",
+                  border: snapshotView === sec ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+                  fontWeight: snapshotView === sec ? 600 : 400,
+                }}>
+                  {sec} ({n})
+                </button>
+              ))}
+              {snapshotView !== "all" && (
+                <button type="button" onClick={() => setSnapshotView("all")} style={{
+                  fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
+                  padding: "3px 10px", borderRadius: "var(--radius-full)",
+                  background: "transparent", color: "var(--color-fg-muted)",
+                  border: "1px solid var(--color-border)", fontWeight: 500,
+                }}>
+                  Clear filter
+                </button>
+              )}
+            </div>
           )}
-        </div>
 
-        {/* ── Divider ── */}
-        <div style={{ height: 1, background: "var(--color-border)", marginBottom: "var(--space-5)" }} />
+          {/* Divider */}
+          <div style={{ borderBottom: "1px solid var(--color-border)", marginBottom: "var(--space-8)" }} />
 
         {loading && (
           <div style={{ padding: "var(--space-4) 0" }}>
@@ -729,12 +786,11 @@ export default function FeedPage() {
                 Searching with AI&hellip;
               </p>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "var(--space-5)" }}>
-                <div className="skeleton-card" style={{ height: 280 }} />
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-                  <div className="skeleton-card" style={{ height: 130 }} />
-                  <div className="skeleton-card" style={{ height: 130 }} />
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+                <div className="skeleton-card" style={{ height: 360 }} />
+                <div className="skeleton-card" style={{ height: 200 }} />
+                <div className="skeleton-card" style={{ height: 200 }} />
+                <div className="skeleton-card" style={{ height: 140 }} />
               </div>
             )}
           </div>
@@ -743,7 +799,7 @@ export default function FeedPage() {
         {/* Semantic search answer banner */}
         {searchMode === "results" && searchAnswer && !loading && (
           <div style={{
-            padding: "12px 16px", marginBottom: "var(--space-5)",
+            padding: "12px 16px", marginBottom: "var(--space-8)",
             borderRadius: "var(--radius-lg)", background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             display: "flex", gap: 12, alignItems: "flex-start",
@@ -778,144 +834,115 @@ export default function FeedPage() {
           </div>
         )}
 
-        {/* ── HERO + SECONDARY ── */}
-        {searchMode !== "results" && !loading && hero && (
-          <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "var(--space-5)", marginBottom: "var(--space-6)", paddingBottom: "var(--space-6)", borderBottom: "1px solid var(--color-border)" }}>
-            <Link href={`/stories/${hero.id}`} style={{ textDecoration: "none", color: "inherit", gridRow: "1 / 3" }}>
-              <article className={`card-interactive glass severity-border-${hero.severity || "low"}`} style={{ height: "100%", display: "flex", flexDirection: "column", cursor: "pointer", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: sectionColor(hero.section) }}>
-                    {hero.section}
-                  </span>
-                  <FreshnessBadge createdAt={hero.created_at} publishedAt={hero.published_at} />
-                </div>
-                <h2 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", lineHeight: "var(--leading-snug)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", marginBottom: "var(--space-3)", display: "flex", alignItems: "flex-start", gap: 8 }}>
-                  <span aria-hidden="true" style={{ color: sectionColor(hero.section), lineHeight: 1 }}>{storyIcon(hero.section)}</span>
-                  <span>{hero.headline}</span>
-                </h2>
-                <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-secondary)", lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-3)" }}>
-                  {hero.summary}
-                </p>
-                <ProfileMatchTags story={hero} profile={profile} extraProducts={watchedProducts} />
-                <RelevanceReason reason={hero.relevance_reason} />
-                <div style={{ marginTop: "auto", paddingTop: "var(--space-3)", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                  <SourceBlock labels={hero.source_labels} urls={hero.source_urls} max={2} />
-                  <TrustIndicator sourceCount={hero.source_urls.length} severity={hero.severity} />
-                </div>
-              </article>
-            </Link>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              {secondary.map((s, i) => (
-                <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <article className={`card-interactive glass severity-border-${s.severity || "low"}`} style={{
-                    display: "flex", flexDirection: "column", cursor: "pointer",
-                    borderRadius: "var(--radius-lg)",
-                    padding: "var(--space-4)",
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: sectionColor(s.section) }}>
-                        {s.section}
-                      </span>
-                      <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
-                    </div>
-                    <h3 style={{ fontSize: "var(--text-md)", fontWeight: "var(--weight-semibold)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: 6, letterSpacing: "var(--tracking-tight)", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span aria-hidden="true" style={{ color: sectionColor(s.section), lineHeight: 1 }}>{storyIcon(s.section)}</span>
-                      <span>{s.headline}</span>
-                    </h3>
-                    <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", marginBottom: 6 }}>
-                      {truncate(s.summary, 120)}
-                    </p>
-                    <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
-                    <RelevanceReason reason={s.relevance_reason} />
-                    <SourceBlock labels={s.source_labels} urls={s.source_urls} max={1} />
-                  </article>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Search results grid */}
-        {searchMode === "results" && !loading && stories.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-5)", marginBottom: "var(--space-8)" }}>
-            {stories.map((s) => (
-              <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                <article className={`card-interactive glass severity-border-${s.severity || "low"}`} style={{ display: "flex", flexDirection: "column", height: "100%", cursor: "pointer", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6, alignItems: "center" }}>
-                    {s.regions.map((r) => <span key={r} className="badge badge-default">{r}</span>)}
-                    <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
+        {/* ── STORY FEED grouped by AI category ── */}
+        {!loading && displayStories.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-12)" }}>
+            {groupBySection(displayStories).map(({ section, stories: sectionStories }) => {
+              const lead = sectionStories[0];
+              const featured = sectionStories.slice(1, 3);
+              const rest = sectionStories.slice(3);
+              return (
+                <div key={section} id={`section-${section.replace(/\s+/g, "-").toLowerCase()}`}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
+                    <div style={{ width: 4, height: 20, borderRadius: "var(--radius-full)", background: sectionColor(section) }} />
+                    <h2 style={{
+                      fontSize: "var(--text-md)", fontWeight: 700, fontFamily: "var(--font-sans)",
+                      letterSpacing: "var(--tracking-wider)", textTransform: "uppercase",
+                      color: sectionColor(section), margin: 0,
+                    }}>
+                      {section}
+                    </h2>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
+                      {sectionStories.length}
+                    </span>
                   </div>
-                  <span style={{ fontSize: "var(--text-2xs)", fontWeight: 600, fontFamily: "var(--font-sans)", letterSpacing: "var(--tracking-wider)", textTransform: "uppercase", color: sectionColor(s.section), marginBottom: 4, display: "block" }}>
-                    {s.section}
-                  </span>
-                  <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--weight-semibold)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: 6, letterSpacing: "var(--tracking-tight)", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                    <span aria-hidden="true" style={{ color: sectionColor(s.section), lineHeight: 1 }}>{storyIcon(s.section)}</span>
-                    <span>{s.headline}</span>
-                  </h3>
-                  <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", flex: 1, marginBottom: 6 }}>
-                    {truncate(s.summary || s.body, 120)}
-                  </p>
-                  <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
-                  <RelevanceReason reason={s.relevance_reason} />
-                  <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
-                </article>
-              </Link>
-            ))}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+                    {lead && (
+                      <Link href={`/stories/${lead.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                        <article className="news-card card-interactive" style={{ "--news-card-accent": severityAccentColor(lead.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
+                          <StoryImage story={lead} size="lead" />
+                          <div style={{ padding: "var(--space-5)" }}>
+                            <div className="news-card-meta">
+                              <span style={{ color: sectionColor(lead.section), fontWeight: 600, textTransform: "uppercase" }}>{lead.section}</span>
+                              <FreshnessBadge createdAt={lead.created_at} publishedAt={lead.published_at} />
+                              <span className={`badge ${lead.severity === "high" ? "badge-danger" : lead.severity === "medium" ? "badge-warning" : "badge-info"}`} style={{ fontSize: "var(--text-2xs)" }}>{lead.severity}</span>
+                            </div>
+                            <h2 className="news-card-title" style={{ fontSize: "var(--text-lg)", marginBottom: "var(--space-3)", lineHeight: 1.25 }}>
+                              {lead.headline}
+                            </h2>
+                            <p className="news-card-summary" style={{ marginBottom: "var(--space-4)", fontSize: "var(--text-base)" }}>{lead.summary}</p>
+                            <ProfileMatchTags story={lead} profile={profile} extraProducts={watchedProducts} />
+                            <RelevanceReason reason={lead.relevance_reason} />
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "var(--space-3)" }}>
+                              <SourceBlock labels={lead.source_labels} urls={lead.source_urls} max={2} />
+                              <TrustIndicator sourceCount={lead.source_urls.length} severity={lead.severity} />
+                            </div>
+                          </div>
+                        </article>
+                      </Link>
+                    )}
+                    {featured.map((s) => (
+                      <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                        <article className="news-card card-interactive" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
+                          <StoryImage story={s} size="medium" />
+                          <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column" }}>
+                            <div className="news-card-meta">
+                              <span style={{ color: sectionColor(s.section), fontWeight: 600, textTransform: "uppercase" }}>{s.section}</span>
+                              <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
+                            </div>
+                            <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: "var(--space-2)" }}>
+                              {s.headline}
+                            </h3>
+                            <p className="news-card-summary">{truncate(s.summary, 160)}</p>
+                            <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-2)" }}>
+                              <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
+                              <FeedbackButtons storyId={s.id} />
+                            </div>
+                          </div>
+                        </article>
+                      </Link>
+                    ))}
+                    {rest.map((s) => (
+                      <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                        <article className="news-card card-interactive" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "row", cursor: "pointer", padding: "var(--space-4)", gap: "var(--space-4)", alignItems: "center" } as React.CSSProperties}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="news-card-meta" style={{ marginBottom: 4 }}>
+                              <span style={{ color: sectionColor(s.section), fontWeight: 600, textTransform: "uppercase", fontSize: "var(--text-2xs)" }}>{s.section}</span>
+                              <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
+                            </div>
+                            <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: 4 }}>
+                              {s.headline}
+                            </h3>
+                            <p className="news-card-summary" style={{ fontSize: "var(--text-xs)", marginBottom: 0 }}>{truncate(s.summary || s.body, 100)}</p>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: "var(--space-2)" }}>
+                              <SourceBlock labels={s.source_labels} urls={s.source_urls} max={1} />
+                              <FeedbackButtons storyId={s.id} />
+                            </div>
+                          </div>
+                        </article>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* ── THEMATIC SECTIONS ── */}
-        {searchMode !== "results" && !loading && sections.map(({ section, stories: sectionStories }) => (
-          <div key={section} style={{ marginBottom: "var(--space-8)" }}>
-            <div className="section-divider" />
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: "var(--space-5)" }}>
-              <div style={{ width: 5, height: 20, borderRadius: 2, background: sectionColor(section) }} />
-              <h2 style={{
-                fontSize: "var(--text-md)", fontWeight: "var(--weight-bold)", fontFamily: "var(--font-sans)",
-                letterSpacing: "var(--tracking-wider)", textTransform: "uppercase",
-                color: sectionColor(section), margin: 0,
-              }}>
-                {section}
-              </h2>
-              <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
-                {sectionStories.length}
-              </span>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "var(--space-6)" }}>
-              {sectionStories.map((s) => (
-                <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <article className={`card-interactive glass severity-border-${s.severity || "low"}`} style={{ display: "flex", flexDirection: "column", height: "100%", cursor: "pointer", borderRadius: "var(--radius-lg)", padding: "var(--space-4)" }}>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6, alignItems: "center" }}>
-                      {s.regions.map((r) => <span key={r} className="badge badge-default">{r}</span>)}
-                      {s.domains.map((d) => <span key={d} className="badge badge-default">{d === "pharma" ? "Pharma" : "Devices"}</span>)}
-                      <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
-                    </div>
-                    <h3 style={{ fontSize: "var(--text-base)", fontWeight: "var(--weight-semibold)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: 6, letterSpacing: "var(--tracking-tight)", display: "flex", alignItems: "flex-start", gap: 6 }}>
-                      <span aria-hidden="true" style={{ color: sectionColor(s.section), lineHeight: 1 }}>{storyIcon(s.section)}</span>
-                      <span>{s.headline}</span>
-                    </h3>
-                    <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-normal)", flex: 1, marginBottom: 8 }}>
-                      {truncate(s.summary || s.body, 100)}
-                    </p>
-                    <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
-                    <RelevanceReason reason={s.relevance_reason} />
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-                      <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
-                      <FeedbackButtons storyId={s.id} />
-                    </div>
-                  </article>
-                </Link>
-              ))}
-            </div>
-          </div>
-        ))}
+        {!loading && displayStories.length === 0 && filteredStories.length > 0 && (
+          <p style={{ color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", fontSize: "var(--text-sm)" }}>
+            No stories match the current view. Try clearing the filter.
+          </p>
+        )}
+        </main>
       </div>
-
 
       <style>{`
         @keyframes searchSpin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes spin {
           to { transform: rotate(360deg); }
         }
       `}</style>
@@ -947,7 +974,7 @@ function FreshnessBadge({ createdAt, publishedAt }: { createdAt?: string; publis
       <span style={{
         fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", fontWeight: 600,
         padding: "1px 6px", borderRadius: "var(--radius-full)",
-        background: isNew ? "var(--color-primary)" : "var(--color-surface-raised)",
+        background: isNew ? "var(--color-primary-solid)" : "var(--color-surface-raised)",
         color: isNew ? "#fff" : "var(--color-fg-muted)",
       }} title={`Added to feed: ${feedDate}`}>
         {isNew ? "\u26A1 " : ""}{text}
@@ -1029,8 +1056,8 @@ function FeedbackButtons({ storyId }: { storyId: string }) {
         title="Not relevant"
         style={{
           padding: "2px 6px", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)",
-          background: signal === "down" ? "#FEE2E2" : "transparent",
-          color: signal === "down" ? "#DC2626" : "var(--color-fg-muted)",
+          background: signal === "down" ? "var(--color-danger-bg)" : "transparent",
+          color: signal === "down" ? "var(--color-danger)" : "var(--color-fg-muted)",
           cursor: "pointer", fontSize: "var(--text-xs)", lineHeight: 1,
           transition: "all 0.15s ease",
         }}

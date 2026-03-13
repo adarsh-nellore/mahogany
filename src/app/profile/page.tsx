@@ -16,12 +16,12 @@ const DEBOUNCE_MS = 500;
 
 function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: "var(--space-5)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "var(--color-surface)", overflow: "hidden" }}>
-      <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)" }}>
-        <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>{title}</div>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginTop: 2 }}>{desc}</div>
+    <div style={{ marginBottom: "var(--space-6)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", background: "var(--color-surface)", overflow: "hidden" }}>
+      <div style={{ padding: "var(--space-5) var(--space-6)", borderBottom: "1px solid var(--color-border)" }}>
+        <div style={{ fontSize: "var(--text-md)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>{title}</div>
+        <div style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginTop: 4, lineHeight: "var(--leading-relaxed)" }}>{desc}</div>
       </div>
-      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>{children}</div>
+      <div style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: 20 }}>{children}</div>
     </div>
   );
 }
@@ -107,17 +107,17 @@ export default function ProfilePage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-5) var(--space-4) var(--space-10)" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "var(--space-8) var(--space-6) var(--space-12)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-5)" }}>
           <Breadcrumbs items={[{ label: "Feed", href: "/feed" }, { label: "Profile" }]} />
           {saveStatus === "saved" && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-primary)", fontWeight: 600 }}>Saved</span>}
           {saveStatus === "error" && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-danger)" }}>Save failed</span>}
         </div>
 
-        <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", margin: "0 0 var(--space-4)", fontFamily: "var(--font-sans)" }}>
+        <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", margin: "0 0 var(--space-3)" }}>
           Profile
         </h1>
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", margin: "0 0 var(--space-5)", fontFamily: "var(--font-sans)" }}>
+        <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-muted)", margin: "0 0 var(--space-6)", fontFamily: "var(--font-sans)", lineHeight: "var(--leading-relaxed)" }}>
           Your account information. All changes are saved automatically.
         </p>
 

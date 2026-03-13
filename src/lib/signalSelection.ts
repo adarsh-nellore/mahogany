@@ -34,7 +34,7 @@ const REGION_BUCKETS = [
 // US/FDA first with higher limit; international kept as-is
 const DEFAULT_REGION_BUCKETS = DISABLE_US_SOURCES
   ? REGION_BUCKETS
-  : [{ region: "US", limit: 90 }, ...REGION_BUCKETS];
+  : [{ region: "US", limit: 120 }, ...REGION_BUCKETS];
 
 /**
  * Shared signal selection used by both feed and digest.

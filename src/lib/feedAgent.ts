@@ -488,6 +488,21 @@ CRITICAL RULES:
               return src.label;
             });
 
+            const indices = s.signal_indices || [];
+            // Backfill regions from source signals if AI left it empty
+            const inferredRegions = (s.regions && s.regions.length > 0)
+              ? s.regions
+              : [...new Set(
+                  indices
+                    .map((idx: number) => interleaved[idx]?.region ?? signals[idx]?.region)
+                    .filter(Boolean)
+                )];
+            // Backfill TAs from source signals if AI left it empty
+            const inferredTAs = (s.therapeutic_areas && s.therapeutic_areas.length > 0)
+              ? s.therapeutic_areas
+              : [...new Set(
+                  indices.flatMap((idx: number) => interleaved[idx]?.therapeutic_areas ?? signals[idx]?.therapeutic_areas ?? [])
+                )];
             return {
               profile_id: profile?.id || null,
               headline: s.headline,
@@ -496,14 +511,14 @@ CRITICAL RULES:
               section: s.section || "",
               severity: (["high", "medium", "low"].includes(s.severity) ? s.severity : "medium") as FeedStory["severity"],
               domains: (s.domains || []) as FeedStory["domains"],
-              regions: (s.regions || []) as FeedStory["regions"],
-              therapeutic_areas: s.therapeutic_areas || [],
+              regions: inferredRegions as FeedStory["regions"],
+              therapeutic_areas: inferredTAs,
               impact_types: (s.impact_types || []) as FeedStory["impact_types"],
-              signal_ids: (s.signal_indices || []).map((idx) => interleaved[idx]?.id ?? signals[idx]?.id).filter(Boolean),
+              signal_ids: indices.map((idx: number) => interleaved[idx]?.id ?? signals[idx]?.id).filter(Boolean),
               source_urls: validSources.map((x) => x.url),
               source_labels: enrichedLabels,
               is_global: !profile,
-              published_at: derivePublishedAt(s.signal_indices || [], interleaved),
+              published_at: derivePublishedAt(indices, interleaved),
               relevance_reason: s.relevance_reason || null,
             };
           });
@@ -582,6 +597,13 @@ function parseStoriesFromText(
           if (matchingSignal) return `${src.label} — ${matchingSignal.title.slice(0, 80)}`;
           return src.label;
         });
+        const indices = s.signal_indices || [];
+        const inferredRegions = (s.regions && s.regions.length > 0)
+          ? s.regions
+          : [...new Set(indices.map((idx: number) => signals[idx]?.region).filter(Boolean))];
+        const inferredTAs = (s.therapeutic_areas && s.therapeutic_areas.length > 0)
+          ? s.therapeutic_areas
+          : [...new Set(indices.flatMap((idx: number) => signals[idx]?.therapeutic_areas ?? []))];
         return {
           profile_id: null,
           headline: s.headline,
@@ -590,14 +612,14 @@ function parseStoriesFromText(
           section: s.section || "",
           severity: (["high", "medium", "low"].includes(s.severity) ? s.severity : "medium") as FeedStory["severity"],
           domains: (s.domains || []) as FeedStory["domains"],
-          regions: (s.regions || []) as FeedStory["regions"],
-          therapeutic_areas: s.therapeutic_areas || [],
+          regions: inferredRegions as FeedStory["regions"],
+          therapeutic_areas: inferredTAs,
           impact_types: (s.impact_types || []) as FeedStory["impact_types"],
-          signal_ids: (s.signal_indices || []).map((idx) => signals[idx]?.id).filter(Boolean),
+          signal_ids: indices.map((idx: number) => signals[idx]?.id).filter(Boolean),
           source_urls: validSources.map((x) => x.url),
           source_labels: enrichedLabels,
           is_global: true,
-          published_at: derivePublishedAt(s.signal_indices || [], signals),
+          published_at: derivePublishedAt(indices, signals),
           relevance_reason: s.relevance_reason || null,
         };
       });

@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
-import Breadcrumbs from "@/components/Breadcrumbs";
 import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
 import { REGION_OPTIONS } from "@/lib/feedFilters";
 
@@ -69,12 +68,10 @@ function extractTitle(preview: string): string {
 
 function Section({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: "var(--space-5)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "var(--color-surface)", overflow: "hidden" }}>
-      <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)" }}>
-        <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>{title}</div>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginTop: 2 }}>{desc}</div>
-      </div>
-      <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>{children}</div>
+    <div className="container-block" style={{ marginBottom: "var(--space-5)" }}>
+      <div className="container-block-header">{title}</div>
+      <div className="container-block-desc">{desc}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>{children}</div>
     </div>
   );
 }
@@ -181,75 +178,79 @@ export default function DigestPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-5) var(--space-6)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
-          <Breadcrumbs items={[{ label: "Feed", href: "/feed" }, { label: "Digests" }]} />
-          {saveStatus === "saved" && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-primary)", fontWeight: 600 }}>Saved</span>}
-          {saveStatus === "error" && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-danger)" }}>Save failed</span>}
-        </div>
+      <div className="digest-layout" style={{ padding: "var(--space-6) var(--space-6) var(--space-16)", paddingRight: "calc(var(--copilot-width, 360px) + var(--space-6))", display: "grid", gridTemplateColumns: "280px 1fr", gap: "var(--space-6)", alignItems: "start", transition: "padding-right 0.25s ease" }}>
+        {/* Left panel: Regulatory scope, portfolio, settings */}
+        <div className="digest-left-panel hide-scrollbar" style={{ position: "sticky", top: "calc(var(--topbar-height) + var(--space-6))", maxHeight: "calc(100vh - var(--topbar-height) - var(--space-12))", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+          {(saveStatus === "saved" || saveStatus === "error") && (
+            <div>
+              {saveStatus === "saved" && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-primary)", fontWeight: 600 }}>Saved</span>}
+              {saveStatus === "error" && <span style={{ fontSize: "var(--text-xs)", color: "var(--color-danger)" }}>Save failed</span>}
+            </div>
+          )}
 
-        <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", margin: "0 0 var(--space-2)", fontFamily: "var(--font-sans)" }}>
-          Digest
-        </h1>
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", margin: "0 0 var(--space-5)", fontFamily: "var(--font-sans)" }}>
-          Configure your feed scope, portfolio, and email digest. All changes are saved automatically.
-        </p>
+          {/* Regulatory Scope — separate blocks per category */}
+          {profile && (
+            <>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Regions</span>
+                <ChipSelector
+                  options={REGION_OPTIONS.map((r) => r.id)}
+                  labels={Object.fromEntries(REGION_OPTIONS.map((r) => [r.id, r.label]))}
+                  selected={profile.regions || []}
+                  onToggle={(r) => update({ regions: toggle(profile.regions || [], r) })}
+                />
+              </div>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Domains</span>
+                <ChipSelector options={["devices", "pharma"]} labels={{ devices: "Medical Devices", pharma: "Pharma & Biologics" }} selected={profile.domains || []} onToggle={(d) => update({ domains: toggle(profile.domains || [], d) })} />
+              </div>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Therapeutic Areas</span>
+                <ChipSelector options={[...THERAPEUTIC_AREAS]} selected={profile.therapeutic_areas || []} onToggle={(t) => update({ therapeutic_areas: toggle(profile.therapeutic_areas || [], t.toLowerCase()) })} />
+              </div>
+              <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Product Types</span>
+                {(() => {
+                  const opts = [
+                    ...(profile.domains?.includes("devices") ? DEVICE_PRODUCT_TYPES : []),
+                    ...(profile.domains?.includes("pharma") ? PHARMA_PRODUCT_TYPES : []),
+                  ];
+                  return opts.length > 0 ? (
+                    <ChipSelector options={opts} selected={profile.product_types || []} onToggle={(p) => update({ product_types: toggle(profile.product_types || [], p) })} />
+                  ) : (
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", margin: 0 }}>Select domains first.</p>
+                  );
+                })()}
+              </div>
+            </>
+          )}
 
-        {/* Regulatory Scope */}
+        {/* Portfolio — separate blocks */}
         {profile && (
-          <Section title="Regulatory Scope" desc="Markets, domains, therapeutic areas, and product types — drives feed and digest">
-            <FieldGroup label="Regions">
-              <ChipSelector
-                options={REGION_OPTIONS.map((r) => r.id)}
-                labels={Object.fromEntries(REGION_OPTIONS.map((r) => [r.id, r.label]))}
-                selected={profile.regions || []}
-                onToggle={(r) => update({ regions: toggle(profile.regions || [], r) })}
-              />
-            </FieldGroup>
-            <FieldGroup label="Domains">
-              <ChipSelector options={["devices", "pharma"]} labels={{ devices: "Medical Devices", pharma: "Pharma & Biologics" }} selected={profile.domains || []} onToggle={(d) => update({ domains: toggle(profile.domains || [], d) })} />
-            </FieldGroup>
-            <FieldGroup label="Therapeutic Areas">
-              <ChipSelector options={[...THERAPEUTIC_AREAS]} selected={profile.therapeutic_areas || []} onToggle={(t) => update({ therapeutic_areas: toggle(profile.therapeutic_areas || [], t.toLowerCase()) })} />
-            </FieldGroup>
-            <FieldGroup label="Product Types">
-              {(() => {
-                const opts = [
-                  ...(profile.domains?.includes("devices") ? DEVICE_PRODUCT_TYPES : []),
-                  ...(profile.domains?.includes("pharma") ? PHARMA_PRODUCT_TYPES : []),
-                ];
-                return opts.length > 0 ? (
-                  <ChipSelector options={opts} selected={profile.product_types || []} onToggle={(p) => update({ product_types: toggle(profile.product_types || [], p) })} />
-                ) : (
-                  <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)" }}>Select domains first.</p>
-                );
-              })()}
-            </FieldGroup>
-          </Section>
-        )}
-
-        {/* Portfolio */}
-        {profile && (
-          <Section title="Portfolio" desc="Tracked products, key numbers (active submissions), and competitors">
-            <FieldGroup label="Tracked Products">
+          <>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Tracked Products</span>
               <TagEditor tags={profile.tracked_products || []} setTags={(t) => update({ tracked_products: t })} placeholder="Add a product..." />
-            </FieldGroup>
-            <FieldGroup label="Key Numbers / Active Submissions">
+            </div>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Active Submissions</span>
               <TagEditor tags={profile.active_submissions || []} setTags={(t) => update({ active_submissions: t })} placeholder="Add submission numbers..." />
-            </FieldGroup>
-            <FieldGroup label="Competitors">
+            </div>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Competitors</span>
               <TagEditor tags={profile.competitors || []} setTags={(t) => update({ competitors: t })} placeholder="Add a competitor..." />
-            </FieldGroup>
-          </Section>
+            </div>
+          </>
         )}
 
         {/* Tracked Items */}
         {profile && <TrackedItemsSection profileId={profile.id} />}
 
-        {/* Digest configuration */}
+        {/* Digest configuration — separate blocks */}
         {profile && (
-          <Section title="Digest Settings" desc="Email frequency, send time, and AI instructions — auto-saved">
-            <FieldGroup label="Frequency">
+          <>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Frequency</span>
               <div style={{ display: "flex", gap: 8 }}>
                 {CADENCE_OPTIONS.map((c) => (
                   <button
@@ -257,23 +258,21 @@ export default function DigestPage() {
                     type="button"
                     onClick={() => update({ digest_cadence: c.id })}
                     style={{
-                      padding: "8px 12px",
-                      borderRadius: "var(--radius-md)",
-                      fontSize: "var(--text-xs)",
-                      fontWeight: 500,
+                      padding: "4px 12px", borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
                       border: profile.digest_cadence === c.id ? "1px solid var(--color-primary)" : "1px solid var(--color-border)",
-                      background: profile.digest_cadence === c.id ? "var(--color-primary-subtle)" : "var(--color-surface)",
-                      color: profile.digest_cadence === c.id ? "var(--color-primary)" : "var(--color-fg-muted)",
-                      cursor: "pointer",
-                      fontFamily: "var(--font-sans)",
+                      background: profile.digest_cadence === c.id ? "var(--color-primary-subtle)" : "transparent",
+                      color: profile.digest_cadence === c.id ? "var(--color-primary)" : "var(--color-fg-secondary)",
+                      fontFamily: "var(--font-sans)", transition: "all 0.15s ease",
                     }}
                   >
                     {c.label}
                   </button>
                 ))}
               </div>
-            </FieldGroup>
-            <FieldGroup label="Send Time">
+            </div>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Send Time</span>
               <div style={{ display: "flex", gap: 8 }}>
                 <select
                   value={profile.digest_send_hour}
@@ -294,24 +293,26 @@ export default function DigestPage() {
                   ))}
                 </select>
               </div>
-            </FieldGroup>
-            <FieldGroup label="Analysis Priorities">
+            </div>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Analysis Priorities</span>
               <textarea
                 className="input"
                 value={profile.analysis_preferences}
                 onChange={(e) => update({ analysis_preferences: e.target.value })}
-                rows={4}
+                rows={3}
                 placeholder="e.g. Focus on Class III device approvals. Flag competitive intelligence from Medtronic and Abbott."
-                style={{ resize: "vertical", minHeight: 80 }}
+                style={{ resize: "vertical", minHeight: 60 }}
               />
-            </FieldGroup>
-            <FieldGroup label="Send Test Digest">
+            </div>
+            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Send Test Digest</span>
               <input
                 type="email"
                 placeholder="Override email (optional)"
                 value={testEmail}
                 onChange={(e) => setTestEmail(e.target.value)}
-                style={{ width: "100%", maxWidth: 280, padding: "6px 10px", fontSize: "var(--text-sm)", marginBottom: 8, fontFamily: "var(--font-sans)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)" }}
+                style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)" }}
               />
               <button
                 type="button"
@@ -331,24 +332,27 @@ export default function DigestPage() {
                 }}
                 disabled={sendingTest}
                 className="btn btn-secondary btn-sm"
+                style={{ alignSelf: "flex-start" }}
               >
-                {sendingTest ? "Sending…" : testResult === "sent" ? "✓ Sent" : testResult === "failed" ? "Failed" : "Send Test Now"}
+                {sendingTest ? "Sending…" : testResult === "sent" ? "Sent" : testResult === "failed" ? "Failed" : "Send Test Now"}
               </button>
-            </FieldGroup>
-          </Section>
+            </div>
+          </>
         )}
-
-        {/* Digest archive */}
-        <div style={{ marginBottom: "var(--space-3)" }}>
-          <h2 style={{ fontSize: "var(--text-md)", fontWeight: "var(--weight-semibold)", color: "var(--color-fg)", margin: 0, fontFamily: "var(--font-sans)" }}>
-            Digest Archive
-          </h2>
-          <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", marginTop: "var(--space-1)", fontFamily: "var(--font-sans)" }}>
-            {total > 0 ? `${total} digest${total !== 1 ? "s" : ""} generated` : "Your past digests will appear here."}
-          </p>
         </div>
 
-        {loading && (
+        {/* Right panel: Digest archive */}
+        <div style={{ minWidth: 0, maxWidth: 960, margin: "0 auto", width: "100%" }}>
+          <div style={{ marginBottom: "var(--space-5)" }}>
+            <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-xl)", fontWeight: "var(--weight-semibold)", color: "var(--color-fg)", margin: 0 }}>
+              Digest Archive
+            </h2>
+            <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-muted)", marginTop: "var(--space-2)", fontFamily: "var(--font-sans)" }}>
+              {total > 0 ? `${total} digest${total !== 1 ? "s" : ""} generated` : "Your past digests will appear here."}
+            </p>
+          </div>
+
+          {loading && (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
             <div className="skeleton-card" style={{ height: 64 }} />
             <div className="skeleton-card" style={{ height: 64 }} />
@@ -366,64 +370,63 @@ export default function DigestPage() {
           </div>
         )}
 
-        {!loading && digests.length > 0 && Object.entries(groups).map(([date, items]) => (
-          <div key={date} style={{ marginBottom: "var(--space-5)" }}>
-            <div style={{
-              fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-fg-muted)",
-              textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "var(--font-sans)",
-              marginBottom: "var(--space-3)", paddingBottom: "var(--space-2)",
-              borderBottom: "1px solid var(--color-border)",
-            }}>
-              {date}
-            </div>
+          {!loading && digests.length > 0 && Object.entries(groups).map(([date, items]) => (
+            <div key={date} style={{ marginBottom: "var(--space-5)" }}>
+              <div style={{
+                fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-fg-muted)",
+                textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "var(--font-sans)",
+                marginBottom: "var(--space-3)", paddingBottom: "var(--space-2)",
+                borderBottom: "1px solid var(--color-border)",
+              }}>
+                {date}
+              </div>
 
-            <div style={{ borderRadius: "var(--radius-lg)", border: "1px solid var(--color-border)", background: "var(--color-surface)", overflow: "hidden" }}>
-              {items.map((d, i) => {
-                const title = extractTitle(d.preview);
-                const time = new Date(d.sent_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-                const isLast = i === items.length - 1;
-                return (
-                  <Link key={d.id} href={`/digest/${d.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: "var(--space-3)",
-                      padding: "var(--space-4)",
-                      borderBottom: isLast ? "none" : "1px solid var(--color-border)",
-                      cursor: "pointer",
-                      transition: "background 0.1s ease",
-                    }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-surface-raised)"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+              <div style={{ borderRadius: "var(--radius-xl)", border: "1px solid var(--color-border)", background: "var(--color-surface)", overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
+                {items.map((d, i) => {
+                  const title = extractTitle(d.preview);
+                  const time = new Date(d.sent_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+                  const isLast = i === items.length - 1;
+                  return (
+                    <Link key={d.id} href={`/digest/${d.id}`} style={{ textDecoration: "none", color: "inherit" }}>
                       <div style={{
-                        width: 36, height: 36, borderRadius: "var(--radius-md)",
-                        background: "var(--color-primary-subtle)", color: "var(--color-primary)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "var(--text-sm)", flexShrink: 0,
-                      }}>
-                        {"\u{1F4E7}"}
+                        display: "flex", alignItems: "center", gap: "var(--space-3)",
+                        padding: "var(--space-4)",
+                        borderBottom: isLast ? "none" : "1px solid var(--color-border)",
+                        cursor: "pointer",
+                        transition: "background 0.1s ease",
+                      }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--color-surface-raised)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{
+                            fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-fg)", margin: 0,
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-sans)",
+                          }}>
+                            {title}
+                          </p>
+                          <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", margin: 0, marginTop: 2, fontFamily: "var(--font-sans)" }}>
+                            {d.signal_ids?.length || 0} signals analyzed
+                          </p>
+                        </div>
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", whiteSpace: "nowrap", flexShrink: 0, fontFamily: "var(--font-sans)" }}>
+                          {time}
+                        </span>
+                        <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-placeholder)" }}>›</span>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--color-fg)", margin: 0,
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-sans)",
-                        }}>
-                          {title}
-                        </p>
-                        <p style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", margin: 0, marginTop: 2, fontFamily: "var(--font-sans)" }}>
-                          {d.signal_ids?.length || 0} signals analyzed
-                        </p>
-                      </div>
-                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", whiteSpace: "nowrap", flexShrink: 0, fontFamily: "var(--font-sans)" }}>
-                        {time}
-                      </span>
-                      <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-placeholder)" }}>›</span>
-                    </div>
-                  </Link>
-                );
-              })}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
+      <style>{`
+        @media (max-width: 1024px) {
+          .digest-layout { grid-template-columns: 1fr !important; }
+          .digest-left-panel { position: static !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -533,12 +536,10 @@ function TrackedItemsSection({ profileId }: { profileId: string }) {
   };
 
   return (
-    <div style={{ marginBottom: "var(--space-5)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", background: "var(--color-surface)", overflow: "hidden" }}>
-      <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)" }}>
-        <div style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)" }}>Tracked Items</div>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginTop: 2 }}>Products, companies, and topics you&apos;re monitoring</div>
-      </div>
-      <div style={{ padding: "16px 18px" }}>
+    <div className="container-block" style={{ marginBottom: "var(--space-5)" }}>
+      <div className="container-block-header">Tracked Items</div>
+      <div className="container-block-desc">Products, companies, and topics you&apos;re monitoring</div>
+      <div>
         <input className="input" value={searchQuery} onChange={(e) => searchEntities(e.target.value)} placeholder="Search entities to track..." style={{ width: "100%", marginBottom: 8 }} />
         {searchResults.length > 0 && (
           <div style={{ marginBottom: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>

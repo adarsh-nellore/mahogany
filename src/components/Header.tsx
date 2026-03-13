@@ -46,8 +46,10 @@ export default function Header() {
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <header className="topbar" style={{ position: "sticky", top: 0, zIndex: 40 }}>
+    <header className="topbar" style={{ position: "sticky", top: 0, zIndex: 60 }}>
       <Link href="/feed" className="topbar-brand" style={{ textDecoration: "none" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand-mark.png" alt="" aria-hidden="true" width={32} height={32} style={{ flexShrink: 0, objectFit: "contain" }} />
         Mahogany
       </Link>
 
@@ -63,10 +65,10 @@ export default function Header() {
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Account menu"
             style={{
-              width: 32, height: 32, borderRadius: "var(--radius-full)",
+              width: 40, height: 40, borderRadius: "var(--radius-full)",
               background: "var(--color-fg)", color: "var(--color-fg-inverse)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 600, fontFamily: "var(--font-sans)",
+              fontSize: 13, fontWeight: 600, fontFamily: "var(--font-sans)",
               border: "none", cursor: "pointer", letterSpacing: "0.02em",
             }}
           >

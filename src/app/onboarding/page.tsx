@@ -235,20 +235,20 @@ export default function OnboardingPage() {
         }} />
       </div>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 20px" }}>
-        <div style={{ width: "100%", maxWidth: 520 }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "var(--space-8) var(--space-6)" }}>
+        <div style={{ width: "100%", maxWidth: 560 }}>
 
           {/* ─── Step: Identity ─── */}
           {step === "identity" && (
             <>
-              <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
+              <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-3xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: "var(--space-3)", lineHeight: "var(--leading-tight)" }}>
                 Set up your intelligence profile
               </h1>
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: 1.6, marginBottom: 32 }}>
+              <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-8)" }}>
                 Tell us about yourself so we can personalize your regulatory feed and alerts.
               </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 32 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 20, marginBottom: "var(--space-8)" }}>
                 <FormField label="Name" required>
                   <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Park" autoFocus />
                 </FormField>
@@ -275,7 +275,7 @@ export default function OnboardingPage() {
             <>
               <StepHeader title="Your focus areas" subtitle="Select the markets, domains, and therapeutic areas you follow." onBack={goBack} />
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: 32 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: "var(--space-8)" }}>
                 <FormField label="Markets" required>
                   <ToggleChips items={REGIONS} selected={regions} onToggle={(item) => toggleArray(regions, setRegions, item)} />
                 </FormField>
@@ -300,7 +300,7 @@ export default function OnboardingPage() {
             <>
               <StepHeader title="Products & competitors" subtitle="Add specific products you want to track. You can always update these later." onBack={goBack} />
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: 32 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 24, marginBottom: "var(--space-8)" }}>
                 <FormField label="Your products" hint="Search for products you're responsible for">
                   <ProductSearch
                     domain={domains.length === 1 ? domains[0] as "pharma" | "devices" : "both"}
@@ -377,7 +377,7 @@ export default function OnboardingPage() {
 
               <div style={{
                 background: "var(--color-surface)", border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-lg)", padding: 20, marginBottom: 24, fontSize: "var(--text-sm)",
+                borderRadius: "var(--radius-xl)", padding: "var(--space-6)", marginBottom: "var(--space-6)", fontSize: "var(--text-sm)",
               }}>
                 <ProfileSection label="You">
                   <div style={{ color: "var(--color-fg)" }}><strong>{name}</strong></div>
@@ -577,10 +577,10 @@ function StepHeader({ title, subtitle, onBack }: { title: string; subtitle: stri
         </svg>
         Back
       </button>
-      <h2 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: 8 }}>
+      <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", color: "var(--color-fg)", marginBottom: "var(--space-3)", lineHeight: "var(--leading-tight)" }}>
         {title}
       </h2>
-      <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", lineHeight: 1.6, marginBottom: 24 }}>
+      <p style={{ fontSize: "var(--text-base)", color: "var(--color-fg-muted)", lineHeight: "var(--leading-relaxed)", marginBottom: "var(--space-6)" }}>
         {subtitle}
       </p>
     </>
@@ -610,7 +610,7 @@ function ToggleChips({ items, labels, selected, onToggle }: { items: string[]; l
             type="button"
             onClick={() => onToggle(item)}
             style={{
-              padding: "6px 14px",
+              padding: "8px 16px",
               borderRadius: "var(--radius-md)",
               border: `1px solid ${isSelected ? "var(--color-primary)" : "var(--color-border)"}`,
               background: isSelected ? "var(--color-primary-subtle)" : "var(--color-surface)",
@@ -785,7 +785,7 @@ function ProductSearch({
         <div style={{
           position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, zIndex: 50,
           background: "var(--color-surface)", border: "1px solid var(--color-border)",
-          borderRadius: "var(--radius-lg)", boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-lg)",
           maxHeight: 240, overflowY: "auto",
         }}>
           {results.slice(0, 8).map((r) => {

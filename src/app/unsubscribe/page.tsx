@@ -36,7 +36,7 @@ export default function UnsubscribePage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "var(--space-8)" }}>
       <div style={{ maxWidth: 440, width: "100%", textAlign: "center" }}>
-        <h1 style={{ fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", marginBottom: "var(--space-3)" }}>
+        <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", color: "var(--color-fg)", marginBottom: "var(--space-4)" }}>
           Unsubscribe
         </h1>
 

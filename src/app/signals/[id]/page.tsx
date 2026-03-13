@@ -58,7 +58,7 @@ export default function SignalDetailPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "var(--space-6)" }}>
+      <div style={{ maxWidth: 760, margin: "0 auto", padding: "var(--space-8) var(--space-6)" }}>
         <Link href="/feed" style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "var(--space-1)", marginBottom: "var(--space-4)" }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
           Back to feed
@@ -76,7 +76,7 @@ export default function SignalDetailPage() {
               <span className="badge badge-default">{label(signal.lifecycle_stage)}</span>
             </div>
 
-            <h1 style={{ fontSize: "var(--text-xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: "var(--space-4)" }}>
+            <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "var(--text-2xl)", fontWeight: "var(--weight-bold)", letterSpacing: "var(--tracking-tight)", lineHeight: "var(--leading-snug)", color: "var(--color-fg)", marginBottom: "var(--space-5)" }}>
               {signal.title}
             </h1>
 

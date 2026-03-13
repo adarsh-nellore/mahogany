@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   const therapeutic = sp.get("therapeutic_areas")?.split(",").filter(Boolean) || [];
   const productCodes = sp.get("product_codes")?.split(",").filter(Boolean) || [];
   const globalOnly = sp.get("global") === "true";
+  const sinceDaysRaw = sp.get("since_days");
+  const sinceDays = sinceDaysRaw && /^\d+$/.test(sinceDaysRaw) ? parseInt(sinceDaysRaw, 10) : null;
   const page = Math.max(1, parseInt(sp.get("page") || "1", 10));
   const perPage = Math.min(120, Math.max(1, parseInt(sp.get("per_page") || "40", 10)));
   const offset = (page - 1) * perPage;
@@ -57,8 +59,7 @@ export async function GET(request: NextRequest) {
 
   if (regions.length > 0) {
     paramIdx++;
-    // Stories with no region tags are global content — always include them
-    conditions.push(`(cardinality(regions) = 0 OR regions && $${paramIdx})`);
+    conditions.push(`regions && $${paramIdx}`);
     params.push(regions);
   }
 
@@ -78,8 +79,7 @@ export async function GET(request: NextRequest) {
       .map((t) => t.replace(/\s+/g, " & "))
       .join(" | ");
     conditions.push(
-      // Stories with no TA tags are general regulatory content — always include them
-      `(cardinality(therapeutic_areas) = 0 OR therapeutic_areas && $${taParam} OR to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ to_tsquery('english', $${taTextParam}))`
+      `(therapeutic_areas && $${taParam} OR to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ to_tsquery('english', $${taTextParam}))`
     );
     params.push(therapeutic);
     params.push(taSearchTerms);
@@ -93,6 +93,12 @@ export async function GET(request: NextRequest) {
       params.push(`%${String(pc).replace(/%/g, "\\%")}%`);
     }
     conditions.push(`(${pcConditions.join(" OR ")})`);
+  }
+
+  if (sinceDays !== null) {
+    paramIdx++;
+    conditions.push(`published_at >= NOW() - ($${paramIdx}::text || ' days')::interval`);
+    params.push(sinceDays);
   }
 
   if (search) {
