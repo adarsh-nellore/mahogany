@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { setSessionCookie } from "@/lib/session";
+
+// Deprecated: new login should go through /api/auth/sign-in (Supabase Auth).
+// Kept for backward compat; no longer sets a session cookie.
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,9 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const res = NextResponse.json({ id: rows[0].id });
-    setSessionCookie(res, rows[0].id);
-    return res;
+    return NextResponse.json({ id: rows[0].id });
   } catch (err) {
     console.error("[api/profiles/login]", err);
     return NextResponse.json(

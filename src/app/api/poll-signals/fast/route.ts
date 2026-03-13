@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchAllFast } from "@/lib/fetchers";
 import { classifyAndStore } from "@/lib/ingestion";
+import { requireCronAuth } from "@/lib/cron-auth";
 
 export const maxDuration = 300;
 
@@ -11,7 +12,10 @@ async function ingestFast() {
   return classifyAndStore(drafts);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const summary = await ingestFast();
     return NextResponse.json(summary);
@@ -21,7 +25,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const summary = await ingestFast();
     return NextResponse.json(summary);

@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { loadFeedSignals, generateFeedForProfiles } from "@/app/api/generate-feed/route";
 
 export const maxDuration = 300;
@@ -79,7 +80,10 @@ async function runMorningFeed(): Promise<{
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await runMorningFeed();
     return NextResponse.json(result);
@@ -92,7 +96,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await runMorningFeed();
     return NextResponse.json(result);

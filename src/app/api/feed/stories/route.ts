@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { FeedStory, Profile } from "@/lib/types";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 import { zipValidSourceLinks } from "@/lib/sourceUrl";
 
 export async function GET(request: NextRequest) {
@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
   if (globalOnly) {
     conditions.push(`is_global = true`);
   } else {
-    const profileId = await getSessionProfileId();
+    const authUser = await getAuthUser(request);
+    const profileId = authUser?.id ?? null;
     if (profileId) {
       const profileRows = await query<Profile>(
         `SELECT id FROM profiles WHERE id = $1`,
@@ -59,7 +60,8 @@ export async function GET(request: NextRequest) {
 
   if (regions.length > 0) {
     paramIdx++;
-    conditions.push(`regions && $${paramIdx}`);
+    // Include stories that match region or have no region tags (general content)
+    conditions.push(`(cardinality(regions) = 0 OR regions && $${paramIdx})`);
     params.push(regions);
   }
 
@@ -78,8 +80,9 @@ export async function GET(request: NextRequest) {
     const taSearchTerms = therapeutic
       .map((t) => t.replace(/\s+/g, " & "))
       .join(" | ");
+    // Include stories that match TA, match via text search, or have no TA tags (general content)
     conditions.push(
-      `(therapeutic_areas && $${taParam} OR to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ to_tsquery('english', $${taTextParam}))`
+      `(therapeutic_areas && $${taParam} OR to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ to_tsquery('english', $${taTextParam}) OR cardinality(therapeutic_areas) = 0)`
     );
     params.push(therapeutic);
     params.push(taSearchTerms);

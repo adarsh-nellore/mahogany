@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 
 export async function GET(request: NextRequest) {
   try {
-    const profileId = await getSessionProfileId();
-    if (!profileId) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const profileId = user.id;
 
     const sp = request.nextUrl.searchParams;
     const page = Math.max(1, parseInt(sp.get("page") || "1", 10));

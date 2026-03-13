@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { query } from "@/lib/db";
 import { FeedStory } from "@/lib/types";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 import { searchProfileEvidence } from "@/lib/profileSearchAgent";
 
 function getAnthropic() {
@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Query required" }, { status: 400 });
     }
 
-    const profileId = await getSessionProfileId();
+    const authUser = await getAuthUser(request);
+    const profileId = authUser?.id ?? null;
     const evidence = profileId
       ? await searchProfileEvidence(profileId, 80).catch(() => [])
       : [];

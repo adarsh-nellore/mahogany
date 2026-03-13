@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { runFeedAgent } from "@/lib/feedAgent";
 import { DISABLE_US_SOURCES } from "@/lib/experimentFlags";
 import { Signal, Profile } from "@/lib/types";
@@ -166,7 +167,10 @@ async function generate(): Promise<{ global_stories: number; profile_stories: Re
   return generateFeedForProfiles(null, signals);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await generate();
     return NextResponse.json(result);
@@ -176,7 +180,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await generate();
     return NextResponse.json(result);

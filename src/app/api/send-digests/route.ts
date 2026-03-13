@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { requireCronAuth } from "@/lib/cron-auth";
 import { query } from "@/lib/db";
 import { selectSignalsForProfile } from "@/lib/signalSelection";
 import { generateDigest } from "@/lib/summarizer";
@@ -8,6 +9,28 @@ import { Profile, DigestSendSummary } from "@/lib/types";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
+}
+
+function getLocalHour(timezone: string): number {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || "UTC",
+      hour: "numeric",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(new Date());
+    const hourPart = parts.find((p) => p.type === "hour");
+    return hourPart ? parseInt(hourPart.value, 10) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function isInDigestHourWindow(localHour: number, digestSendHour: number): boolean {
+  const lo = (digestSendHour - 1 + 24) % 24;
+  const hi = (digestSendHour + 1) % 24;
+  if (lo <= hi) return localHour >= lo && localHour <= hi;
+  return localHour >= lo || localHour <= hi;
 }
 
 export const maxDuration = 300;
@@ -21,24 +44,26 @@ async function sendDigests(): Promise<DigestSendSummary> {
 
   try {
     const now = new Date();
-    const currentHour = now.getUTCHours();
-    const hourWindow = [(currentHour + 23) % 24, currentHour, (currentHour + 1) % 24];
+    console.log(`[send-digests] running at ${now.toISOString()}`);
 
-    console.log(`[send-digests] currentHour=${currentHour} UTC, hourWindow=${JSON.stringify(hourWindow)}, time=${now.toISOString()}`);
-
-    const profiles = await query<Profile>(
+    const candidates = await query<Profile>(
       `SELECT * FROM profiles
-       WHERE digest_send_hour = ANY($1)
-         AND (
-           last_digest_at IS NULL
-           OR (digest_cadence = 'daily'        AND last_digest_at < now() - interval '20 hours')
-           OR (digest_cadence = 'twice_weekly'  AND last_digest_at < now() - interval '3 days')
-           OR (digest_cadence = 'weekly'        AND last_digest_at < now() - interval '6 days')
-         )`,
-      [hourWindow]
+       WHERE (
+         last_digest_at IS NULL
+         OR (digest_cadence = 'daily'        AND last_digest_at < now() - interval '20 hours')
+         OR (digest_cadence = 'twice_weekly'  AND last_digest_at < now() - interval '3 days')
+         OR (digest_cadence = 'weekly'        AND last_digest_at < now() - interval '6 days')
+       )`
     );
 
-    console.log(`[send-digests] matched ${profiles.length} profile(s) for hourWindow=${JSON.stringify(hourWindow)}`);
+    const profiles = candidates.filter((p) => {
+      const tz = p.timezone || "UTC";
+      const localHour = getLocalHour(tz);
+      const digestHour = p.digest_send_hour ?? 7;
+      return isInDigestHourWindow(localHour, digestHour);
+    });
+
+    console.log(`[send-digests] ${profiles.length} profile(s) in digest hour window (of ${candidates.length} cadence-eligible)`);
 
     if (profiles.length === 0) {
       return summary;
@@ -127,7 +152,10 @@ async function sendDigests(): Promise<DigestSendSummary> {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const summary = await sendDigests();
     return NextResponse.json(summary);
@@ -136,7 +164,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const summary = await sendDigests();
     return NextResponse.json(summary);

@@ -203,7 +203,7 @@ export default function Home() {
               Log in
             </button>
           )}
-          <Link href="/onboarding" className="btn btn-primary btn-md">Get started</Link>
+          <Link href="/signup" className="btn btn-primary btn-md">Get started</Link>
         </div>
       </header>
 
@@ -253,7 +253,7 @@ export default function Home() {
 
             {/* CTAs — more breathing room below ticker */}
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", marginTop: "var(--space-8)" }}>
-              <Link href="/onboarding" className="btn btn-primary btn-md">
+              <Link href="/signup" className="btn btn-primary btn-md">
                 Get started
               </Link>
               {hasProfile === true ? (
@@ -294,7 +294,7 @@ export default function Home() {
               <div className="empty-state-icon">📰</div>
               <div className="empty-state-title">No stories yet</div>
               <div className="empty-state-desc">Sign up to get your first personalized digest.</div>
-              <Link href="/onboarding" className="btn btn-primary btn-md">Get started</Link>
+              <Link href="/signup" className="btn btn-primary btn-md">Get started</Link>
             </div>
           )}
 
@@ -426,7 +426,7 @@ export default function Home() {
               Create a profile and we&apos;ll deliver AI-curated regulatory intelligence every morning, tailored to your portfolio and markets.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-              <Link href="/onboarding" className="btn btn-primary btn-md" style={{ width: "100%", textAlign: "center" }} onClick={dismissGate}>
+              <Link href="/signup" className="btn btn-primary btn-md" style={{ width: "100%", textAlign: "center" }} onClick={dismissGate}>
                 Get started
               </Link>
               {!showSignIn ? (

@@ -1,16 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { query } from "@/lib/db";
 import { FeedStory, Profile } from "@/lib/types";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 
 function getAnthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const profileId = await getSessionProfileId();
+    const user = await getAuthUser(request);
+    const profileId = user?.id ?? null;
     let profileContext = "";
     let storyHeadlines: string[] = [];
 

@@ -8,7 +8,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      {pathname !== "/" && <ChatWidget />}
+      {pathname !== "/" && pathname !== "/login" && pathname !== "/signup" && <ChatWidget />}
     </>
   );
 }

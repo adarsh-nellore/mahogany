@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { resetRecoverableSources } from "@/lib/sourceRecovery";
+import { requireCronAuth } from "@/lib/cron-auth";
 
 export const maxDuration = 60;
 
@@ -32,7 +33,10 @@ async function recover() {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await recover();
     return NextResponse.json(result);
@@ -45,7 +49,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const result = await recover();
     return NextResponse.json(result);

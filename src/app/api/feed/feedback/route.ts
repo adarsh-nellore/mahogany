@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 
 export async function POST(request: NextRequest) {
   try {
-    const profileId = await getSessionProfileId();
-    if (!profileId) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const profileId = user.id;
 
     const { story_id, signal } = (await request.json()) as {
       story_id: string;
@@ -39,10 +40,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const profileId = await getSessionProfileId();
-    if (!profileId) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const profileId = user.id;
 
     const storyId = request.nextUrl.searchParams.get("story_id");
     if (storyId) {

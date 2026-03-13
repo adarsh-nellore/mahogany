@@ -1,14 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 import { Profile } from "@/lib/types";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const profileId = await getSessionProfileId();
-    if (!profileId) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    const user = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const profileId = user.id;
 
     const rows = await query<Profile>(
       `SELECT * FROM profiles WHERE id = $1`,

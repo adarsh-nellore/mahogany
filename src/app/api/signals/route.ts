@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { Profile } from "@/lib/types";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
   let paramIdx = 0;
 
   if (personalized) {
-    const profileId = await getSessionProfileId();
+    const user = await getAuthUser(request);
+    const profileId = user?.id ?? null;
     if (profileId) {
       const profileRows = await query<Profile>(
         `SELECT regions, domains FROM profiles WHERE id = $1`,

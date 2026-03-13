@@ -112,6 +112,19 @@ export default function OnboardingPage() {
     }
   }, []);
 
+  // Pre-fill name/email from profile when user is authenticated (e.g. from signup)
+  useEffect(() => {
+    fetch("/api/profiles/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((p) => {
+        if (p) {
+          if (p.name) setName(p.name);
+          if (p.email) setEmail(p.email);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Step navigation
   const stepIdx = STEPS.indexOf(step);
   const goNext = () => { if (stepIdx < STEPS.length - 1) setStep(STEPS[stepIdx + 1]); };

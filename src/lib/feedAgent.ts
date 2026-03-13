@@ -523,8 +523,19 @@ CRITICAL RULES:
             };
           });
           if (mapped.length > 0) {
-            finalStories = mapped;
-            console.log(`[feed-agent] finalized ${finalStories.length} stories after ${turn + 1} turns`);
+            if (mapped.length >= 15) {
+              finalStories = mapped;
+              console.log(`[feed-agent] finalized ${finalStories.length} stories after ${turn + 1} turns`);
+            } else {
+              // Too few stories — ask the agent to add more
+              console.warn(`[feed-agent] agent submitted ${mapped.length} stories (minimum 15), asking to add more`);
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: toolUse.id,
+                content: `ERROR: You submitted only ${mapped.length} stories. You MUST write and submit at least 15 stories (target 25-40). Cover more signals — write standalone stories for important items that don't fit groups. Call finalize_stories again with a larger JSON array.`,
+              });
+              continue;
+            }
           } else {
             // Empty finalization — ask the agent to try again
             console.warn("[feed-agent] agent called finalize_stories with 0 stories, asking to retry");

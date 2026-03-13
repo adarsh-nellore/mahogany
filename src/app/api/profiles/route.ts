@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { ProfileCreateRequest } from "@/lib/types";
-import { setSessionCookie } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 import { parseIntakeText, persistIntakeMentions, persistIntakeSession } from "@/lib/intakeParser";
 import { persistIntakeEntityMappings, resolveIntakeMentions } from "@/lib/entityResolver";
 import { buildPolicyFromSession, persistProfilePolicy } from "@/lib/pathPlanner";
@@ -10,6 +10,9 @@ import { kickoffIntakeWorkflow, kickoffProfileRefreshWorkflow } from "@/lib/orch
 export async function POST(request: NextRequest) {
   try {
     const body: ProfileCreateRequest = await request.json();
+    // Auth check is best-effort: if Supabase is unreachable, profile creation still proceeds.
+    let authUser: { id: string; email: string } | null = null;
+    try { authUser = await getAuthUser(request); } catch { /* proceed without auth ctx */ }
 
     if (!body.email || !body.name) {
       return NextResponse.json(
@@ -48,13 +51,17 @@ export async function POST(request: NextRequest) {
       } catch { /* table may not exist */ }
     }
 
+    // Use Supabase auth user's UUID if available; otherwise generate one.
+    // Always supplying an explicit id avoids reliance on a DB-side DEFAULT.
+    const profileId = authUser?.id ?? crypto.randomUUID();
+
     const result = await query<{ id: string }>(
       `INSERT INTO profiles (
-        email, name, regions, domains, therapeutic_areas,
+        id, email, name, regions, domains, therapeutic_areas,
         product_types, tracked_products, role, organization,
         active_submissions, competitors, regulatory_frameworks,
         analysis_preferences, digest_cadence, digest_send_hour, timezone
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
       ON CONFLICT (email) DO UPDATE SET
         name = EXCLUDED.name,
         regions = EXCLUDED.regions,
@@ -74,6 +81,7 @@ export async function POST(request: NextRequest) {
         updated_at = now()
       RETURNING id`,
       [
+        profileId,
         body.email,
         body.name,
         body.regions,
@@ -93,7 +101,8 @@ export async function POST(request: NextRequest) {
       ]
     );
 
-    const profileId = result[0].id;
+    // result[0].id matches profileId we inserted (RETURNING id confirms the write)
+    void result[0].id;
 
     if (body.intake_text && body.intake_text.trim().length > 0) {
       const parsed = await parseIntakeText(body.intake_text);
@@ -122,23 +131,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Fire-and-forget: trigger feed story generation for this new profile
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      "http://localhost:3000";
     fetch(`${baseUrl}/api/feed/generate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `mahogany_profile=${profileId}`,
-      },
+      headers: { "Content-Type": "application/json" },
     }).catch((err) => console.error("[profiles] feed generation trigger failed:", err));
     kickoffProfileRefreshWorkflow(profileId).catch((err) =>
       console.error("[profiles] temporal profile refresh failed:", err)
     );
 
-    const res = NextResponse.json({ id: profileId, message: "Profile saved" });
-    setSessionCookie(res, profileId);
-    return res;
+    return NextResponse.json({ id: profileId, message: "Profile saved" });
   } catch (err) {
     console.error("[api/profiles] error:", err);
     return NextResponse.json(

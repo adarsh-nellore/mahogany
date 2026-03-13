@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
 import { REGION_OPTIONS, PRODUCT_CODE_OPTIONS } from "@/lib/feedFilters";
 import Header from "@/components/Header";
@@ -263,13 +264,20 @@ export default function FeedPage() {
   const [searchingNewProduct, setSearchingNewProduct] = useState(false);
   const productSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const router = useRouter();
   useEffect(() => {
     fetch("/api/profiles/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => {
         if (!p) return;
+        const regions = p.regions || [];
+        const domains = p.domains || [];
+        if (regions.length === 0 || domains.length === 0) {
+          router.push("/onboarding");
+          return;
+        }
         setProfile(p);
-        // Initialize filter chips from profile (defaults); user can override/deselect.
+        // Pre-populate filters from profile so user sees relevant content by default.
         const profileTAs = (p.therapeutic_areas || []).map((t: string) => {
           const low = t.toLowerCase().trim();
           const match = THERAPEUTIC_AREAS.find((ta) => ta.toLowerCase() === low);
@@ -278,8 +286,6 @@ export default function FeedPage() {
         setActiveTAs(new Set(profileTAs));
         setActiveRegions(new Set(p.regions || []));
         setActiveDomains(new Set(p.domains || []));
-        // Product codes: no profile field, so start empty; user can add
-        setActiveProductCodes(new Set());
         // Load product watch items
         fetch(`/api/profiles/${p.id}/watch-items`)
           .then((r) => r.json())
@@ -550,13 +556,19 @@ export default function FeedPage() {
           {profile && (
             <>
               <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
                   <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Therapeutic Areas</span>
-                  <button type="button" onClick={() => {
-                    const pt = (profile.therapeutic_areas || []).map((t: string) => { const l = t.toLowerCase().trim(); const m = THERAPEUTIC_AREAS.find((a) => a.toLowerCase() === l); return m ? m.toLowerCase() : l; });
-                    setActiveTAs(new Set(pt)); setActiveRegions(new Set(profile.regions || [])); setActiveDomains(new Set(profile.domains || [])); setActiveProductCodes(new Set());
-                    setTimeout(() => fetchStories(), 0);
-                  }} style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "var(--font-sans)" }}>Reset all</button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" onClick={() => {
+                      setActiveTAs(new Set()); setActiveRegions(new Set()); setActiveDomains(new Set()); setActiveProductCodes(new Set());
+                      setTimeout(() => fetchStories(), 0);
+                    }} style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "var(--font-sans)" }}>Clear filters</button>
+                    <button type="button" onClick={() => {
+                      const pt = (profile.therapeutic_areas || []).map((t: string) => { const l = t.toLowerCase().trim(); const m = THERAPEUTIC_AREAS.find((a) => a.toLowerCase() === l); return m ? m.toLowerCase() : l; });
+                      setActiveTAs(new Set(pt)); setActiveRegions(new Set(profile.regions || [])); setActiveDomains(new Set(profile.domains || [])); setActiveProductCodes(new Set());
+                      setTimeout(() => fetchStories(), 0);
+                    }} style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", fontFamily: "var(--font-sans)" }}>Match my profile</button>
+                  </div>
                 </div>
                 <FilterChipRow label="" items={[...THERAPEUTIC_AREAS]} active={activeTAs} onToggle={(key) => { setActiveTAs((p) => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n; }); setTimeout(() => fetchStories(), 0); }} toKey={(x) => x.toLowerCase().trim()} />
               </div>

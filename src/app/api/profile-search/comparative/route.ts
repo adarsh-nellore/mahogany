@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 import { comparativeAlerts } from "@/lib/profileSearchAgent";
 import { completeAgentRun, failAgentRun, logAgentAction, startAgentRun } from "@/lib/agentObservability";
 
@@ -7,7 +7,8 @@ export async function POST(request: NextRequest) {
   let runId: string | null = null;
   try {
     const body = (await request.json()) as { profile_id?: string };
-    const profileId = body.profile_id || (await getSessionProfileId());
+    const authUser = await getAuthUser(request);
+    const profileId = body.profile_id || authUser?.id;
     if (!profileId) {
       return NextResponse.json({ error: "profile_id is required" }, { status: 400 });
     }

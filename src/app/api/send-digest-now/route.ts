@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { query } from "@/lib/db";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 import { selectSignalsForProfile } from "@/lib/signalSelection";
 import { generateDigest } from "@/lib/summarizer";
 import { renderDigestEmail, getDigestSubjectFromMarkdown } from "@/lib/emailRenderer";
@@ -26,10 +26,11 @@ export async function POST(request: NextRequest) {
       regions?: string[];
       domains?: string[];
     };
-    let profileId: string | null = await getSessionProfileId();
+    const authUser = await getAuthUser(request);
+    let profileId: string | null = authUser?.id ?? null;
     if (!profileId && body?.profile_id) profileId = body.profile_id;
     if (!profileId) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const profiles = await query<Profile>(
@@ -45,8 +46,10 @@ export async function POST(request: NextRequest) {
     const profile: Profile = {
       ...baseProfile,
       therapeutic_areas: Array.isArray(body.therapeutic_areas) ? body.therapeutic_areas : baseProfile.therapeutic_areas,
-      regions: Array.isArray(body.regions) ? body.regions : baseProfile.regions,
-      domains: Array.isArray(body.domains) ? body.domains : baseProfile.domains,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      regions: Array.isArray(body.regions) ? (body.regions as any) : baseProfile.regions,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      domains: Array.isArray(body.domains) ? (body.domains as any) : baseProfile.domains,
     };
     const toEmail = body?.to && body.to.includes("@") ? body.to : profile.email;
 

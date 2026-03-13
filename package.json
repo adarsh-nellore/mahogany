@@ -2,15 +2,22 @@
   "name": "mahogany",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": ">=20" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3000}",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "lint": "eslint",
-    "temporal:worker": "tsx src/lib/temporal/worker.ts"
+    "temporal:worker": "tsx src/lib/temporal/worker.ts",
+    "db:setup": "bash scripts/setup-supabase-db.sh",
+    "seed-feed": "bash scripts/seed-feed.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.1",
     "@temporalio/client": "^1.15.0",
     "@temporalio/worker": "^1.15.0",
     "@temporalio/workflow": "^1.15.0",
@@ -23,6 +30,7 @@
     "rss-parser": "^3.13.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.18.0",

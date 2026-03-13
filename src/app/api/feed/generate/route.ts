@@ -1,16 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { runFeedAgent } from "@/lib/feedAgent";
 import { selectSignalsForFeed } from "@/lib/signalSelection";
 import { getDerivedProfileArrays } from "@/lib/profileUtils";
 import { Profile } from "@/lib/types";
-import { getSessionProfileId } from "@/lib/session";
+import { getAuthUser } from "@/lib/auth-guards";
 
 export const maxDuration = 300;
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const profileId = await getSessionProfileId();
+    const authUser = await getAuthUser(request);
+    const profileId = authUser?.id ?? null;
 
     let profile: Profile | null = null;
     if (profileId) {
