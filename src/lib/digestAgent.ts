@@ -22,6 +22,7 @@ import { Profile, Signal } from "./types";
 import { query } from "./db";
 import { getDerivedProfileArrays } from "./profileUtils";
 import { searchProfileEvidence, comparativeAlerts } from "./profileSearchAgent";
+import { isBlockedSource, isBlockedSignal } from "./fetchers/sourceRegistry";
 import { isValidSourceUrl, getAppBaseUrl } from "./sourceUrl";
 import { findSimilarSignals, rankSignalsForProfile } from "./embeddings";
 
@@ -404,16 +405,18 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
     taParam ? [profile.id, taParam] : [profile.id]
   );
 
-  if (stories.length === 0) return null;
+  // Exclude blocked sources (NYT, AHA, etc.) — same filter as news feed
+  const filtered = stories.filter((s) => !isBlockedSource(s));
+  if (filtered.length === 0) return null;
 
   const sections = new Map<string, typeof stories>();
-  for (const s of stories) {
+  for (const s of filtered) {
     const sec = s.section || "Regulatory Updates";
     if (!sections.has(sec)) sections.set(sec, []);
     sections.get(sec)!.push(s);
   }
   const sectionNames = Array.from(sections.keys());
-  const headlines = stories.slice(0, 10).map((s) => s.headline);
+  const headlines = filtered.slice(0, 10).map((s) => s.headline);
 
   const { title, summary } = await generateDigestHeader(
     sectionNames,
@@ -849,8 +852,8 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
     fallbackParams
   );
 
-  // When TA filter yields nothing, do NOT fall back to unfiltered stories — that would show off-topic content (e.g. oncology when user selected dermatology). Return empty so caller uses raw signals path, which respects profile.
-  const storiesToUse = stories;
+  // Exclude blocked sources (NYT, AHA, etc.) — same filter as news feed
+  const storiesToUse = stories.filter((s) => !isBlockedSource(s));
 
   if (storiesToUse.length > 0) {
     const sections = new Map<string, typeof storiesToUse>();
@@ -897,15 +900,16 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
     return header + body;
   }
 
-  // No feed stories — use raw signals with cleaner formatting
+  // No feed stories — use raw signals with cleaner formatting (exclude blocked sources)
+  const filteredSignals = signals.filter((s) => !isBlockedSignal(s)).slice(0, 25);
   const byType = new Map<string, Signal[]>();
-  for (const s of signals.slice(0, 25)) {
+  for (const s of filteredSignals) {
     const key = (s.impact_type || s.domains?.[0] || "Updates").toString().toUpperCase().replace(/\s+/g, " ");
     if (!byType.has(key)) byType.set(key, []);
     byType.get(key)!.push(s);
   }
   const sectionNames = Array.from(byType.keys());
-  const headlines = signals.slice(0, 10).map((s) => s.title);
+  const headlines = filteredSignals.slice(0, 10).map((s) => s.title);
   const { title, summary } = await generateDigestHeader(
     sectionNames,
     headlines,
@@ -930,5 +934,5 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
   const intro = summary
     ? `${title}\n\n${summary}\n\n`
     : `${title}\n\n`;
-  return intro + "Recent signals from your feed:\n\n" + body;
+  return intro + (filteredSignals.length > 0 ? "Recent signals from your feed:\n\n" + body : "No new signals in your feed. Check back after the next briefing is generated.");
 }

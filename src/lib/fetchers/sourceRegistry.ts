@@ -319,6 +319,15 @@ export function isBlockedSource(story: { source_labels?: string[]; source_urls?:
   return false;
 }
 
+/** Blocked signal (raw signal shape). Used by digest when falling back to signals. */
+export function isBlockedSignal(signal: { source_id?: string; url?: string; authority?: string; title?: string }): boolean {
+  if (signal.source_id && (BLOCKED_SOURCE_IDS as readonly string[]).includes(signal.source_id)) return true;
+  if (signal.url && BLOCKED_SOURCE_URL_PATTERNS.some((p) => p.test(signal.url!))) return true;
+  const text = [signal.authority, signal.title].filter(Boolean).join(" ");
+  if (text && BLOCKED_SOURCE_LABEL_PATTERNS.some((p) => p.test(text))) return true;
+  return false;
+}
+
 // ─── Backward-compat: SOURCE_CHECK_URLS ──────────────────────────────────────
 // Computed view from REGISTRY for health-check consumers.
 

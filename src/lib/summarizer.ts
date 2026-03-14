@@ -1,5 +1,6 @@
 import { Profile, Signal } from "./types";
 import { runDigestAgent } from "./digestAgent";
+import { isBlockedSignal } from "./fetchers/sourceRegistry";
 
 /**
  * Generates a personalized digest using the agentic pipeline.
@@ -15,6 +16,7 @@ export async function generateDigest(
   profile: Profile,
   signals: Signal[]
 ): Promise<string> {
+  const filteredSignals = signals.filter((s) => !isBlockedSignal(s));
   if (signals.length === 0) {
     const dl = profile.domains
       .map((d) => (d === "pharma" ? "Biopharma" : "Medical Device"))
@@ -27,5 +29,5 @@ export async function generateDigest(
     return `${profile.regions.join("/")} ${dl} Regulatory Intelligence Digest – ${dateStr}\n\nThere’s nothing in your briefing yet. Open your feed and use “Generate Briefing” to build your first digest; we’ll use that same content here next time.\n`;
   }
 
-  return runDigestAgent(profile, signals);
+  return runDigestAgent(profile, filteredSignals);
 }
