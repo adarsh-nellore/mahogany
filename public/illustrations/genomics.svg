@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-genomics" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#052e16"/>
+      <stop offset="100%" stop-color="#166534"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-genomics)"/>
+  <path d="M80 100 Q100 60 120 100 Q140 140 160 100 Q180 60 200 100" stroke="#4ade80" stroke-width="4" fill="none"/>
+  <path d="M200 100 Q220 60 240 100 Q260 140 280 100 Q300 60 320 100" stroke="#86efac" stroke-width="4" fill="none"/>
+  <circle cx="100" cy="100" r="8" fill="#22c55e"/>
+  <circle cx="140" cy="100" r="8" fill="#4ade80"/>
+  <circle cx="180" cy="100" r="8" fill="#22c55e"/>
+  <circle cx="220" cy="100" r="8" fill="#86efac"/>
+  <circle cx="260" cy="100" r="8" fill="#4ade80"/>
+  <circle cx="300" cy="100" r="8" fill="#22c55e"/>
+  <rect x="320" y="60" width="60" height="80" rx="4" fill="#14532d"/>
+  <rect x="330" y="75" width="40" height="50" rx="2" fill="#166534"/>
+</svg>

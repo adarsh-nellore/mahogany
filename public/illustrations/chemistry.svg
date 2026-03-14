@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-chem" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#422006"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+    <linearGradient id="flask" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#fde68a"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-chem)"/>
+  <path d="M120 160 L140 80 L180 80 L200 160 Z" fill="url(#flask)" opacity="0.9"/>
+  <path d="M230 160 L250 100 L290 100 L310 160 Z" fill="url(#flask)" opacity="0.7"/>
+  <rect x="320" y="90" width="50" height="70" rx="4" fill="#fde68a"/>
+  <rect x="315" y="85" width="60" height="12" rx="2" fill="#fef3c7"/>
+</svg>

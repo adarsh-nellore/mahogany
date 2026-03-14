@@ -1,5 +1,6 @@
 /**
- * Curated Unsplash hero images for the regulatory intelligence platform.
+ * Curated illustration library for the regulatory intelligence platform.
+ * Cartoon-style SVGs mapped to content categories; no external image dependencies.
  * Uses section/content mapping for relevant imagery and id+headline hash for uniqueness.
  */
 
@@ -19,138 +20,36 @@ export interface StoryImageContext {
   therapeutic_areas?: string[];
 }
 
+/** Base path for illustration assets (SVG, cartoon-style). */
+const ILLUSTRATION_BASE = "/illustrations";
+
 const HERO_IMAGES: HeroImage[] = [
-  {
-    url: "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Laboratory research with glassware and blue lighting",
-    category: "laboratory",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Microscope lens in a research laboratory",
-    category: "microscopy",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Medical devices and diagnostic equipment",
-    category: "medical-devices",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Pharmaceutical pills and capsules in production",
-    category: "pharmaceutical",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Scientist performing laboratory work with pipette",
-    category: "lab-work",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1581093458791-9f3c3900df4b?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Abstract data visualization and scientific analysis",
-    category: "data-analytics",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1631549916768-4e9be593fe55?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Molecular biology and biotech research",
-    category: "biotech",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1585435557343-3b092031a831?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Healthcare professional in clinical setting",
-    category: "healthcare",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Regulatory documents and compliance paperwork",
-    category: "compliance",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1504813184591-01572f98c85f?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Hospital surgery room with medical equipment",
-    category: "surgery",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "DNA double helix and genomics research",
-    category: "genomics",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1563213126-a4273aed2016?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Pharmaceutical manufacturing production line",
-    category: "manufacturing",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Data dashboard and analytics screen",
-    category: "ai-analytics",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1526256262350-7da7584cf5eb?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Global shipping containers and trade logistics",
-    category: "supply-chain",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Modern government building exterior",
-    category: "regulatory",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1551076805-e1869033e561?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Clinical trial patient consultation",
-    category: "clinical-trials",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Vaccine vials and immunization research",
-    category: "vaccines",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Business meeting in modern conference room",
-    category: "corporate",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Scientific research with test tubes and chemical analysis",
-    category: "chemistry",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Modern hospital corridor and medical facility",
-    category: "hospital",
-  },
-  // Extra images to reduce repeats per category
-  {
-    url: "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Medical equipment and quality control",
-    category: "medical-devices",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Analytics and business intelligence",
-    category: "data-analytics",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Professional collaboration",
-    category: "corporate",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Research and development lab",
-    category: "laboratory",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Clinical research and medical science",
-    category: "clinical-trials",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=1200&h=400&fit=crop&auto=format&q=80",
-    alt: "Business documents and analysis",
-    category: "compliance",
-  },
+  { url: `${ILLUSTRATION_BASE}/laboratory.svg`, alt: "Laboratory research with glassware", category: "laboratory" },
+  { url: `${ILLUSTRATION_BASE}/microscopy.svg`, alt: "Microscope lens in a research laboratory", category: "microscopy" },
+  { url: `${ILLUSTRATION_BASE}/medical-devices.svg`, alt: "Medical devices and diagnostic equipment", category: "medical-devices" },
+  { url: `${ILLUSTRATION_BASE}/pharmaceutical.svg`, alt: "Pharmaceutical pills and production", category: "pharmaceutical" },
+  { url: `${ILLUSTRATION_BASE}/lab-work.svg`, alt: "Scientist performing laboratory work", category: "lab-work" },
+  { url: `${ILLUSTRATION_BASE}/data-analytics.svg`, alt: "Data visualization and analytics", category: "data-analytics" },
+  { url: `${ILLUSTRATION_BASE}/biotech.svg`, alt: "Molecular biology and biotech research", category: "biotech" },
+  { url: `${ILLUSTRATION_BASE}/healthcare.svg`, alt: "Healthcare professional in clinical setting", category: "healthcare" },
+  { url: `${ILLUSTRATION_BASE}/compliance.svg`, alt: "Regulatory documents and compliance", category: "compliance" },
+  { url: `${ILLUSTRATION_BASE}/surgery.svg`, alt: "Hospital surgery and medical equipment", category: "surgery" },
+  { url: `${ILLUSTRATION_BASE}/genomics.svg`, alt: "DNA and genomics research", category: "genomics" },
+  { url: `${ILLUSTRATION_BASE}/manufacturing.svg`, alt: "Pharmaceutical manufacturing", category: "manufacturing" },
+  { url: `${ILLUSTRATION_BASE}/ai-analytics.svg`, alt: "AI and analytics dashboard", category: "ai-analytics" },
+  { url: `${ILLUSTRATION_BASE}/supply-chain.svg`, alt: "Supply chain and logistics", category: "supply-chain" },
+  { url: `${ILLUSTRATION_BASE}/regulatory.svg`, alt: "Regulatory and policy", category: "regulatory" },
+  { url: `${ILLUSTRATION_BASE}/clinical-trials.svg`, alt: "Clinical trial research", category: "clinical-trials" },
+  { url: `${ILLUSTRATION_BASE}/vaccines.svg`, alt: "Vaccine and immunization research", category: "vaccines" },
+  { url: `${ILLUSTRATION_BASE}/corporate.svg`, alt: "Business and corporate", category: "corporate" },
+  { url: `${ILLUSTRATION_BASE}/chemistry.svg`, alt: "Chemical analysis and research", category: "chemistry" },
+  { url: `${ILLUSTRATION_BASE}/hospital.svg`, alt: "Hospital and medical facility", category: "hospital" },
+  { url: `${ILLUSTRATION_BASE}/medical-devices.svg`, alt: "Medical equipment and quality control", category: "medical-devices" },
+  { url: `${ILLUSTRATION_BASE}/data-analytics.svg`, alt: "Analytics and business intelligence", category: "data-analytics" },
+  { url: `${ILLUSTRATION_BASE}/corporate.svg`, alt: "Professional collaboration", category: "corporate" },
+  { url: `${ILLUSTRATION_BASE}/laboratory.svg`, alt: "Research and development lab", category: "laboratory" },
+  { url: `${ILLUSTRATION_BASE}/clinical-trials.svg`, alt: "Clinical research and medical science", category: "clinical-trials" },
+  { url: `${ILLUSTRATION_BASE}/compliance.svg`, alt: "Business documents and analysis", category: "compliance" },
 ];
 
 export default HERO_IMAGES;
@@ -224,11 +123,9 @@ export function getHeroImageUrlForStory(story: StoryImageContext): string {
 }
 
 /**
- * Landing page hero — the lab research image works well as a
- * wide banner on dark backgrounds with its cool blue tones.
+ * Landing page hero — regulatory illustration for the platform banner.
  */
-export const LANDING_HERO_IMAGE =
-  "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=1920&h=600&fit=crop&auto=format&q=80";
+export const LANDING_HERO_IMAGE = `${ILLUSTRATION_BASE}/regulatory.svg`;
 
 /**
  * Deterministically pick a hero image from a string seed.

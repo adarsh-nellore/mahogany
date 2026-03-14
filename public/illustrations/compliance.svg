@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-compliance" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#422006"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fefce8"/>
+      <stop offset="100%" stop-color="#fef9c3"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-compliance)"/>
+  <rect x="70" y="50" width="100" height="120" rx="4" fill="url(#paper)"/>
+  <rect x="85" y="70" width="70" height="6" rx="2" fill="#d6d3d1"/>
+  <rect x="85" y="85" width="60" height="6" rx="2" fill="#e7e5e4"/>
+  <rect x="85" y="100" width="65" height="6" rx="2" fill="#e7e5e4"/>
+  <path d="M95 130 L105 140 L125 118" stroke="#22c55e" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <rect x="200" y="55" width="90" height="110" rx="4" fill="url(#paper)"/>
+  <rect x="215" y="75" width="60" height="5" rx="2" fill="#d6d3d1"/>
+  <path d="M225 105 L235 115 L255 93" stroke="#22c55e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M225 125 L235 135 L255 113" stroke="#22c55e" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <rect x="310" y="60" width="70" height="100" rx="4" fill="url(#paper)"/>
+  <circle cx="345" cy="95" r="15" fill="#22c55e"/>
+  <path d="M338 95 L343 102 L352 88" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

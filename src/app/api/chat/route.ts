@@ -4,6 +4,7 @@ import { query } from "@/lib/db";
 import { FeedStory, Profile } from "@/lib/types";
 import { getAuthUser } from "@/lib/auth-guards";
 import { searchProfileEvidence } from "@/lib/profileSearchAgent";
+import { isBlockedSource } from "@/lib/fetchers/sourceRegistry";
 
 function getAnthropic() {
   return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -65,43 +66,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Enhanced retrieval: combine recency + relevance + FTS ──────────
+    // ── Full digest retrieval: search ALL feed_stories + signals (not just user's filtered feed) ──────────
     const userQuery = chatMessages[chatMessages.length - 1]?.content || "";
 
-    const conditions = profileId
-      ? `WHERE (profile_id = $1 OR is_global = true)`
-      : `WHERE is_global = true`;
-    const params = profileId ? [profileId] : [];
-
-    // 1. Recent stories (recency-based baseline)
+    // 1. Recent stories from full corpus (global + all profiles) — baseline
     const recentStories = await query<FeedStory>(
       `SELECT id, headline, summary, body, section, severity, domains, regions,
               therapeutic_areas, impact_types, source_urls, source_labels, published_at
-       FROM feed_stories ${conditions}
+       FROM feed_stories
+       WHERE is_global = true OR profile_id IS NOT NULL
        ORDER BY published_at DESC
-       LIMIT 25`,
-      params
+       LIMIT 35`,
+      []
     );
 
-    // 2. Full-text search on user query against stories (if query is substantive)
+    // 2. Full-text search across ALL feed_stories (full digest, not profile-filtered)
     let ftsStories: FeedStory[] = [];
     if (userQuery.length >= 3) {
-      const ftsConditions = profileId
-        ? `WHERE (profile_id = $1 OR is_global = true) AND to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ plainto_tsquery('english', $2)`
-        : `WHERE is_global = true AND to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ plainto_tsquery('english', $1)`;
-      const ftsParams = profileId ? [profileId, userQuery] : [userQuery];
-
       ftsStories = await query<FeedStory>(
         `SELECT id, headline, summary, body, section, severity, domains, regions,
                 therapeutic_areas, impact_types, source_urls, source_labels, published_at
-         FROM feed_stories ${ftsConditions}
+         FROM feed_stories
+         WHERE (is_global = true OR profile_id IS NOT NULL)
+           AND to_tsvector('english', headline || ' ' || summary || ' ' || body) @@ plainto_tsquery('english', $1)
          ORDER BY published_at DESC
-         LIMIT 15`,
-        ftsParams
+         LIMIT 25`,
+        [userQuery]
       );
     }
 
-    // 3. Signal-level data for entity-specific questions
+    // 3. Raw signals for deeper entity-specific questions (full signal corpus)
     let signalContext = "";
     if (userQuery.length >= 3) {
       const signalRows = await query<{ title: string; summary: string; url: string; authority: string; published_at: string }>(
@@ -109,26 +103,25 @@ export async function POST(request: NextRequest) {
          FROM signals
          WHERE to_tsvector('english', title || ' ' || summary) @@ plainto_tsquery('english', $1)
          ORDER BY published_at DESC
-         LIMIT 10`,
+         LIMIT 25`,
         [userQuery]
       ).catch(() => []);
 
       if (signalRows.length > 0) {
-        signalContext = `\n\nRAW SIGNALS MATCHING QUERY:\n${signalRows.map((s) =>
+        signalContext = `\n\nRAW SIGNALS MATCHING QUERY (full regulatory corpus):\n${signalRows.map((s) =>
           `- ${s.title} | ${s.authority} | ${s.published_at} | ${s.url}`
         ).join("\n")}`;
       }
     }
 
-    // Merge and deduplicate stories (FTS results first, then recency)
+    // Merge and deduplicate stories (FTS results first, then recency). Exclude blocked sources.
     const seenIds = new Set<string>();
     const stories: FeedStory[] = [];
     for (const s of [...ftsStories, ...recentStories]) {
-      if (!seenIds.has(s.id)) {
-        seenIds.add(s.id);
-        stories.push(s);
-      }
-      if (stories.length >= 40) break;
+      if (seenIds.has(s.id) || isBlockedSource(s)) continue;
+      seenIds.add(s.id);
+      stories.push(s);
+      if (stories.length >= 50) break;
     }
 
     const storyContext = stories.map((s, i) => {

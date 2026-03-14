@@ -2,6 +2,19 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 
+const MOBILE_BREAKPOINT = 768;
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const update = () => setIsMobile(mql.matches);
+    update(); // initial
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
+  return isMobile;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -22,7 +35,8 @@ const PANEL_WIDTH = 360;
 export { PANEL_WIDTH as CHAT_PANEL_WIDTH };
 
 export default function ChatWidget() {
-  const [open, setOpen] = useState(true);
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [initialSuggestions, setInitialSuggestions] = useState<string[] | null>(null);
@@ -39,6 +53,12 @@ export default function ChatWidget() {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 150);
   }, [open]);
 
+  // Desktop: open by default. Mobile: stay closed (user taps icon to open).
+  useEffect(() => {
+    const mql = window.matchMedia(`(min-width: ${MOBILE_BREAKPOINT}px)`);
+    if (mql.matches) setOpen(true);
+  }, []);
+
   useEffect(() => {
     if (open && initialSuggestions === null) {
       fetch("/api/chat/suggestions")
@@ -51,15 +71,17 @@ export default function ChatWidget() {
     }
   }, [open, initialSuggestions]);
 
-  // Dispatch custom event so page layouts can react to open/close
+  // Dispatch custom event so page layouts can react to open/close.
+  // On mobile, keep --copilot-width 0 so the panel overlays content instead of shrinking the layout.
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("copilot-toggle", { detail: { open } }));
-    document.documentElement.style.setProperty("--copilot-width", open ? `${PANEL_WIDTH}px` : "0px");
-  }, [open]);
+    const width = isMobile ? "0px" : (open ? `${PANEL_WIDTH}px` : "0px");
+    document.documentElement.style.setProperty("--copilot-width", width);
+  }, [open, isMobile]);
 
   // Set initial CSS variable
   useEffect(() => {
-    document.documentElement.style.setProperty("--copilot-width", `${PANEL_WIDTH}px`);
+    document.documentElement.style.setProperty("--copilot-width", "0px");
   }, []);
 
   const send = useCallback(async (text?: string) => {
@@ -121,14 +143,15 @@ export default function ChatWidget() {
         </button>
       )}
 
-      {/* Panel — sits under the header, right edge */}
+      {/* Panel — sits under the header, right edge. Full-width overlay on mobile. */}
       <div style={{
         position: "fixed",
         top: "var(--topbar-height, 56px)",
         right: 0,
         bottom: 0,
         zIndex: 50,
-        width: PANEL_WIDTH,
+        width: isMobile ? "100%" : PANEL_WIDTH,
+        maxWidth: isMobile ? "100%" : PANEL_WIDTH,
         transform: open ? "translateX(0)" : "translateX(100%)",
         transition: "transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)",
         background: "var(--glass-bg, rgba(32, 31, 29, 0.96))",

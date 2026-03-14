@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-micro" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#0c4a6e"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-micro)"/>
+  <rect x="120" y="60" width="160" height="80" rx="8" fill="#0f172a"/>
+  <circle cx="200" cy="100" r="25" fill="#1e3a8a"/>
+  <circle cx="200" cy="100" r="15" fill="#3b82f6"/>
+  <circle cx="200" cy="100" r="5" fill="#93c5fd"/>
+  <path d="M160 100 L120 100" stroke="#64748b" stroke-width="4"/>
+  <path d="M280 100 L320 100" stroke="#64748b" stroke-width="4"/>
+  <rect x="100" y="130" width="80" height="30" rx="4" fill="#1e293b"/>
+  <rect x="220" y="130" width="80" height="30" rx="4" fill="#1e293b"/>
+</svg>

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-pharma" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14532d"/>
+      <stop offset="100%" stop-color="#166534"/>
+    </linearGradient>
+    <linearGradient id="bottle" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#86efac"/>
+      <stop offset="100%" stop-color="#4ade80"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-pharma)"/>
+  <rect x="100" y="80" width="50" height="80" rx="4" fill="url(#bottle)"/>
+  <rect x="95" y="75" width="60" height="15" rx="2" fill="#a7f3d0"/>
+  <ellipse cx="160" cy="125" rx="12" ry="20" fill="#fef3c7"/>
+  <ellipse cx="175" cy="130" rx="10" ry="18" fill="#fde68a"/>
+  <ellipse cx="190" cy="125" rx="12" ry="20" fill="#fef3c7"/>
+  <rect x="230" y="70" width="70" height="100" rx="6" fill="#1e293b"/>
+  <rect x="240" y="85" width="50" height="70" rx="4" fill="#334155"/>
+  <path d="M250 100 L250 150 M265 100 L265 150 M280 100 L280 150" stroke="#64748b" stroke-width="4"/>
+  <rect x="320" y="90" width="50" height="80" rx="4" fill="url(#bottle)"/>
+  <rect x="315" y="85" width="60" height="12" rx="2" fill="#a7f3d0"/>
+</svg>

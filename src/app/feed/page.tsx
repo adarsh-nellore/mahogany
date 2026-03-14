@@ -526,11 +526,11 @@ export default function FeedPage() {
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       <Header />
 
-      {/* ── 2-COLUMN GRID: Sidebar + Main ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", padding: "var(--space-6) var(--space-6) var(--space-16)", paddingRight: "calc(var(--copilot-width, 360px) + var(--space-6))", gap: "var(--space-6)", transition: "padding-right 0.25s ease" }}>
+      {/* ── LAYOUT: Sidebar + Main (2-col desktop, stacked mobile: filters + search at top, feed below) ── */}
+      <div className="feed-layout" style={{ display: "grid", gridTemplateColumns: "280px 1fr", padding: "var(--space-6) var(--space-6) var(--space-16)", paddingRight: "calc(var(--copilot-width, 360px) + var(--space-6))", gap: "var(--space-6)", transition: "padding-right 0.25s ease" }}>
 
-        {/* ── LEFT SIDEBAR: Filters + Watched Products ── */}
-        <aside className="hide-scrollbar" style={{ position: "sticky", top: "calc(var(--topbar-height) + var(--space-6))", alignSelf: "start", maxHeight: "calc(100vh - var(--topbar-height) - var(--space-12))", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+        {/* ── SIDEBAR: Filters + Watched Products (top on mobile) ── */}
+        <aside className="feed-sidebar hide-scrollbar" style={{ position: "sticky", top: "calc(var(--topbar-height) + var(--space-6))", alignSelf: "start", maxHeight: "calc(100vh - var(--topbar-height) - var(--space-12))", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           {/* Time period filter — always visible */}
           <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
             <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Time Period</span>
@@ -634,8 +634,8 @@ export default function FeedPage() {
           </div>
         </aside>
 
-        {/* ── MAIN CONTENT ── */}
-        <main style={{ maxWidth: 960, margin: "0 auto", width: "100%" }}>
+        {/* ── MAIN CONTENT: Search + Feed (below filters on mobile) ── */}
+        <main className="feed-main" style={{ maxWidth: 960, margin: "0 auto", width: "100%" }}>
           {/* Heading */}
           <div style={{ marginBottom: "var(--space-6)" }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--space-4)" }}>
@@ -701,12 +701,13 @@ export default function FeedPage() {
                   color: searchInput.trim() ? "#fff" : "var(--color-fg-muted)",
                   border: "none", cursor: searchInput.trim() ? "pointer" : "default",
                   transition: "background 0.15s ease",
-                }}>
+                }}
+                aria-label="Search">
                 {searchMode === "searching" ? (
                   <span style={{ width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "searchSpin 0.6s linear infinite" }} />
                 ) : (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
                   </svg>
                 )}
               </button>
@@ -959,6 +960,28 @@ export default function FeedPage() {
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @media (max-width: 767px) {
+          .feed-layout {
+            display: flex !important;
+            flex-direction: column !important;
+            grid-template-columns: none !important;
+            padding: var(--space-4) !important;
+            gap: var(--space-4) !important;
+          }
+          .feed-sidebar {
+            order: 1 !important;
+            position: static !important;
+            max-height: none !important;
+            overflow: visible !important;
+            flex-shrink: 0;
+          }
+          .feed-sidebar .container-block {
+            padding: var(--space-3) !important;
+          }
+          .feed-main {
+            order: 2 !important;
+          }
         }
       `}</style>
     </div>

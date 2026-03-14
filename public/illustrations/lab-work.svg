@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-labwork" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#164e63"/>
+      <stop offset="100%" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="liquid" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-labwork)"/>
+  <path d="M100 140 L120 80 L160 80 L180 140 Z" fill="url(#liquid)" opacity="0.9"/>
+  <path d="M220 140 L240 90 L280 90 L300 140 Z" fill="url(#liquid)" opacity="0.8"/>
+  <rect x="320" y="100" width="50" height="40" rx="4" fill="#0e7490"/>
+  <path d="M330 135 L355 135" stroke="#22d3ee" stroke-width="3"/>
+  <circle cx="342" cy="120" r="5" fill="#67e8f9"/>
+</svg>

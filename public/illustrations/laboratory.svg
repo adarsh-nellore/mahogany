@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" fill="none">
+  <defs>
+    <linearGradient id="bg-lab" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a4d6d"/>
+      <stop offset="100%" stop-color="#2d7a9e"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="100%" stop-color="#bae6fd"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="200" rx="12" fill="url(#bg-lab)"/>
+  <ellipse cx="100" cy="140" rx="25" ry="8" fill="#0f2937" opacity="0.4"/>
+  <path d="M90 90 L90 140 L110 140 L110 90 Z" fill="url(#glass)" stroke="#38bdf8" stroke-width="2"/>
+  <path d="M130 100 L130 140 L150 140 L150 100 Z" fill="url(#glass)" stroke="#38bdf8" stroke-width="2"/>
+  <path d="M170 80 L170 140 L190 140 L190 80 Z" fill="url(#glass)" stroke="#38bdf8" stroke-width="2"/>
+  <circle cx="200" cy="95" r="12" fill="#fcd34d" opacity="0.9"/>
+  <path d="M240 110 L240 140 L260 140 L260 110 Z" fill="url(#glass)" stroke="#38bdf8" stroke-width="2"/>
+  <rect x="280" y="100" width="80" height="40" rx="8" fill="#334155" opacity="0.8"/>
+  <circle cx="300" cy="120" r="8" fill="#38bdf8" opacity="0.6"/>
+  <circle cx="330" cy="120" r="8" fill="#4ade80" opacity="0.6"/>
+</svg>
