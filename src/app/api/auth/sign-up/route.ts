@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "@/lib/supabase-server";
+import { createSupabaseAdminAuthClient } from "@/lib/supabase-server";
 
 /**
  * Sign-up creates the auth user only. Profile is created when user completes onboarding.
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createSupabaseAdminClient();
+    const supabase = createSupabaseAdminAuthClient();
     const origin = request.nextUrl.origin;
     const emailRedirectTo = `${origin}/auth/callback?next=/onboarding`;
 

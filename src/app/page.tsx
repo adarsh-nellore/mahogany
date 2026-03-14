@@ -76,7 +76,7 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
   return ordered;
 }
 
-const SCROLL_THRESHOLD_RATIO = 0.15;
+const SCROLL_THRESHOLD_PX = 900; // ~1 viewport; gate shows after scrolling this far
 
 export default function Home() {
   const [stories, setStories] = useState<FeedStory[]>([]);
@@ -138,11 +138,9 @@ export default function Home() {
     const onScroll = () => {
       // Don't show gate while content is still loading — let user see content first
       if (loading || generating) return;
-      const { scrollTop, scrollHeight, clientHeight } = el;
-      const scrollable = scrollHeight - clientHeight;
-      if (scrollable <= 0) return;
-      const ratio = scrollTop / scrollable;
-      if (ratio >= SCROLL_THRESHOLD_RATIO) {
+      const { scrollTop } = el;
+      const threshold = typeof window !== "undefined" ? Math.min(window.innerHeight, SCROLL_THRESHOLD_PX) : SCROLL_THRESHOLD_PX;
+      if (scrollTop >= threshold) {
         if (!dismissedByUserRef.current) setShowGate(true);
       } else {
         dismissedByUserRef.current = false;

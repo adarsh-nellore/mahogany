@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { FeedStory, Profile } from "@/lib/types";
 import { getAuthUser } from "@/lib/auth-guards";
 import { zipValidSourceLinks } from "@/lib/sourceUrl";
+import { isBlockedSource } from "@/lib/fetchers/sourceRegistry";
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
@@ -132,7 +133,8 @@ export async function GET(request: NextRequest) {
       params
     );
 
-    rawStories.sort((a, b) => {
+    const filtered = rawStories.filter((s) => !isBlockedSource(s));
+    filtered.sort((a, b) => {
       const sevOrder = { high: 1, medium: 2, low: 3 } as Record<string, number>;
       const sa = sevOrder[a.severity] || 2;
       const sb = sevOrder[b.severity] || 2;
@@ -140,12 +142,12 @@ export async function GET(request: NextRequest) {
       return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
     });
 
-    const sliced = rawStories.slice(offset, offset + perPage);
+    const sliced = filtered.slice(offset, offset + perPage);
     const stories = sliced.map((s) => {
       const valid = zipValidSourceLinks(s.source_urls, s.source_labels);
       return { ...s, source_urls: valid.map((x) => x.url), source_labels: valid.map((x) => x.label) };
     });
-    const dedupTotal = rawStories.length;
+    const dedupTotal = filtered.length;
 
     return NextResponse.json({ stories, total: dedupTotal, page, per_page: perPage });
   } catch (err) {

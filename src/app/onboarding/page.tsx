@@ -38,6 +38,7 @@ const DOMAINS = [
 ];
 
 import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
+import Header from "@/components/Header";
 
 const DIGEST_CADENCE_OPTIONS = [
   { id: "daily" as const, label: "Daily", desc: "Every morning" },
@@ -246,7 +247,8 @@ export default function OnboardingPage() {
   // ─── Render ───────────────────────────────────────────────────────
 
   return (
-    <main style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", background: "var(--color-bg)", display: "flex", flexDirection: "column" }}>
+      <Header />
       {/* Progress bar */}
       <div style={{ height: 3, background: "var(--color-surface-raised)", flexShrink: 0 }}>
         <div style={{
@@ -572,7 +574,7 @@ export default function OnboardingPage() {
           )}
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 

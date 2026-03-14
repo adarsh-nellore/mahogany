@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { runFeedAgent } from "@/lib/feedAgent";
 import { DISABLE_US_SOURCES } from "@/lib/experimentFlags";
-import { SOURCE_PRIORITY_ORDER_SQL } from "@/lib/fetchers/sourceRegistry";
+import { SOURCE_PRIORITY_ORDER_SQL, BLOCKED_SOURCE_IDS } from "@/lib/fetchers/sourceRegistry";
 import { Signal, Profile } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -24,9 +24,12 @@ export async function loadFeedSignals(): Promise<Signal[]> {
     ? expandedBuckets
     : [{ region: "US", limit: 120 }, ...expandedBuckets];
   const signalWindowDays = 30;
+  const blockedSql = BLOCKED_SOURCE_IDS.length > 0
+    ? ` AND source_id NOT IN (${BLOCKED_SOURCE_IDS.map((id) => `'${String(id).replace(/'/g, "''")}'`).join(", ")})`
+    : "";
   const unionParts = regionBuckets.map(
     (b) =>
-      `(SELECT * FROM signals WHERE region = '${b.region}' AND created_at > now() - interval '${signalWindowDays} days' ORDER BY ${severityOrder}, ${SOURCE_PRIORITY_ORDER_SQL}, published_at DESC LIMIT ${b.limit})`
+      `(SELECT * FROM signals WHERE region = '${b.region}' AND created_at > now() - interval '${signalWindowDays} days'${blockedSql} ORDER BY ${severityOrder}, ${SOURCE_PRIORITY_ORDER_SQL}, published_at DESC LIMIT ${b.limit})`
   );
   return unionParts.length > 0 ? await query<Signal>(unionParts.join("\n UNION ALL\n")) : [];
 }

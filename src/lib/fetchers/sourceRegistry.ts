@@ -261,6 +261,17 @@ export const SOURCE_PRIORITY_ORDER_SQL =
     .map(([id, p]) => `WHEN source_id = '${String(id).replace(/'/g, "''")}' THEN ${p}`)
     .join(" ")} ELSE 3 END`;
 
+/** Source IDs and label patterns excluded from feed (e.g. removed sources). */
+export const BLOCKED_SOURCE_IDS = ["us_nyt_health_rss"] as const;
+export const BLOCKED_SOURCE_LABEL_PATTERNS = [/nyt/i, /new york times/i] as const;
+export const BLOCKED_SOURCE_URL_PATTERNS = [/nytimes\.com/i] as const;
+
+export function isBlockedSource(story: { source_labels?: string[]; source_urls?: string[] }): boolean {
+  if (story.source_labels?.some((l) => BLOCKED_SOURCE_LABEL_PATTERNS.some((p) => p.test(l)))) return true;
+  if (story.source_urls?.some((u) => BLOCKED_SOURCE_URL_PATTERNS.some((p) => p.test(u)))) return true;
+  return false;
+}
+
 // ─── Backward-compat: SOURCE_CHECK_URLS ──────────────────────────────────────
 // Computed view from REGISTRY for health-check consumers.
 

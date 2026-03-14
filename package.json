@@ -12,7 +12,8 @@
     "lint": "eslint",
     "temporal:worker": "tsx src/lib/temporal/worker.ts",
     "db:setup": "bash scripts/setup-supabase-db.sh",
-    "seed-feed": "bash scripts/seed-feed.sh"
+    "seed-feed": "bash scripts/seed-feed.sh",
+    "cleanup:nyt": "bash scripts/cleanup-nyt-stories.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
