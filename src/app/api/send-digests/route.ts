@@ -72,6 +72,10 @@ async function sendDigests(): Promise<DigestSendSummary> {
     const now = new Date();
     console.log(`[send-digests] running at ${now.toISOString()}`);
 
+    if (!process.env.RESEND_API_KEY) {
+      console.error("[send-digests] RESEND_API_KEY is not set — emails will not be sent");
+    }
+
     const candidates = await query<Profile>(
       `SELECT * FROM profiles
        WHERE (
@@ -112,8 +116,10 @@ async function sendDigests(): Promise<DigestSendSummary> {
 
         // Send via Resend
         const subject = getDigestSubjectFromMarkdown(markdown);
-        const { error: sendError } = await getResend().emails.send({
-          from: process.env.RESEND_FROM_EMAIL || "Mahogany RI <onboarding@resend.dev>",
+        const fromEmail = process.env.RESEND_FROM_EMAIL || "Mahogany RI <onboarding@resend.dev>";
+        console.log(`[send-digests] sending to ${profile.email} (from: ${fromEmail})`);
+        const { data: sendData, error: sendError } = await getResend().emails.send({
+          from: fromEmail,
           to: [profile.email],
           subject,
           html,
@@ -123,6 +129,8 @@ async function sendDigests(): Promise<DigestSendSummary> {
           const msg = `Resend error for ${profile.email}: ${JSON.stringify(sendError)}`;
           console.error(`[send-digests] ${msg}`);
           summary.errors.push(msg);
+        } else {
+          console.log(`[send-digests] Resend accepted: id=${sendData?.id ?? "n/a"} for ${profile.email}`);
         }
 
         const signalIds = signals.map((s) => s.id);

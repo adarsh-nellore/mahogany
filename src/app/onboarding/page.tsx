@@ -217,7 +217,7 @@ export default function OnboardingPage() {
         const digestRes = await fetch("/api/send-digest-now", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ profile_id: profileResult.id }),
+          body: JSON.stringify({ profile_id: profileResult.id, to: email }),
         });
         const digestData = await digestRes.json().catch(() => ({}));
         if (!digestRes.ok) {

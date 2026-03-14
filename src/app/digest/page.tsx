@@ -256,22 +256,42 @@ export default function DigestPage() {
         {/* Tracked Items */}
         {profile && <TrackedItemsSection profileId={profile.id} />}
 
-        {/* Digest configuration — separate blocks */}
+        {/* Analysis Priorities — separate block */}
         {profile && (
-          <>
-            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Frequency</span>
-              <div style={{ display: "flex", gap: 8 }}>
+          <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+            <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Analysis Priorities</span>
+            <textarea
+              className="input"
+              value={profile.analysis_preferences}
+              onChange={(e) => update({ analysis_preferences: e.target.value })}
+              rows={3}
+              placeholder="e.g. Focus on Class III device approvals. Flag competitive intelligence from Medtronic and Abbott."
+              style={{ resize: "vertical", minHeight: 60 }}
+            />
+          </div>
+        )}
+
+        {/* Digest schedule + Send Test — one container */}
+        {profile && (
+          <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+            <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Digest Schedule</span>
+            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", margin: 0, fontFamily: "var(--font-sans)" }}>
+              Send digest {CADENCE_OPTIONS.find((c) => c.id === profile.digest_cadence)?.label?.toLowerCase()} at {String(profile.digest_send_hour).padStart(2, "0")}:00 ({TIMEZONE_OPTIONS.find((tz) => tz.value === (profile.timezone || "UTC"))?.label || "UTC"})
+            </p>
+
+            <div>
+              <label style={{ display: "block", fontSize: "var(--text-2xs)", fontWeight: 600, color: "var(--color-fg-secondary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6, fontFamily: "var(--font-sans)" }}>Frequency</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {CADENCE_OPTIONS.map((c) => (
                   <button
                     key={c.id}
                     type="button"
                     onClick={() => update({ digest_cadence: c.id })}
                     style={{
-                      padding: "4px 12px", borderRadius: "var(--radius-full)",
-                      fontSize: "var(--text-xs)", fontWeight: 500, cursor: "pointer",
+                      padding: "8px 12px", borderRadius: "var(--radius-md)",
+                      fontSize: "var(--text-sm)", fontWeight: 500, cursor: "pointer", textAlign: "left",
                       border: profile.digest_cadence === c.id ? "1px solid var(--color-primary)" : "1px solid var(--color-border)",
-                      background: profile.digest_cadence === c.id ? "var(--color-primary-subtle)" : "transparent",
+                      background: profile.digest_cadence === c.id ? "var(--color-primary-subtle)" : "var(--color-surface)",
                       color: profile.digest_cadence === c.id ? "var(--color-primary)" : "var(--color-fg-secondary)",
                       fontFamily: "var(--font-sans)", transition: "all 0.15s ease",
                     }}
@@ -281,9 +301,10 @@ export default function DigestPage() {
                 ))}
               </div>
             </div>
-            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Send Time</span>
-              <div style={{ display: "flex", gap: 8 }}>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "var(--text-2xs)", fontWeight: 600, color: "var(--color-fg-secondary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4, fontFamily: "var(--font-sans)" }}>Time</label>
                 <select
                   value={profile.digest_send_hour}
                   onChange={(e) => update({ digest_send_hour: parseInt(e.target.value, 10) })}
@@ -293,6 +314,9 @@ export default function DigestPage() {
                     <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "var(--text-2xs)", fontWeight: 600, color: "var(--color-fg-secondary)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4, fontFamily: "var(--font-sans)" }}>Timezone</label>
                 <select
                   value={profile.timezone || "UTC"}
                   onChange={(e) => update({ timezone: e.target.value })}
@@ -304,25 +328,26 @@ export default function DigestPage() {
                 </select>
               </div>
             </div>
-            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
-              <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Analysis Priorities</span>
-              <textarea
-                className="input"
-                value={profile.analysis_preferences}
-                onChange={(e) => update({ analysis_preferences: e.target.value })}
-                rows={3}
-                placeholder="e.g. Focus on Class III device approvals. Flag competitive intelligence from Medtronic and Abbott."
-                style={{ resize: "vertical", minHeight: 60 }}
-              />
-            </div>
-            <div className="container-block" style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column", gap: 10 }}>
+
+            <button
+              type="button"
+              onClick={() => save(profile)}
+              className="btn btn-primary btn-sm"
+              style={{ alignSelf: "flex-start" }}
+            >
+              Save schedule
+            </button>
+
+            <hr style={{ border: "none", borderTop: "1px solid var(--color-border)", margin: "var(--space-2) 0" }} />
+
+            <div>
               <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-fg)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Send Test Digest</span>
               <input
                 type="email"
                 placeholder="Override email (optional)"
                 value={testEmail}
                 onChange={(e) => setTestEmail(e.target.value)}
-                style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)" }}
+                style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-sm)", fontFamily: "var(--font-sans)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", marginTop: 8 }}
               />
               <button
                 type="button"
@@ -330,7 +355,7 @@ export default function DigestPage() {
                   setSendingTest(true);
                   setTestResult(null);
                   try {
-                    const payload: Record<string, unknown> = { therapeutic_areas: profile.therapeutic_areas || [], regions: profile.regions || [], domains: profile.domains || [] };
+                    const payload: Record<string, unknown> = { profile_id: profile.id, therapeutic_areas: profile.therapeutic_areas || [], regions: profile.regions || [], domains: profile.domains || [] };
                     if (testEmail.includes("@")) payload.to = testEmail;
                     const res = await fetch("/api/send-digest-now", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
                     setTestResult(res.ok ? "sent" : "failed");
@@ -342,12 +367,12 @@ export default function DigestPage() {
                 }}
                 disabled={sendingTest}
                 className="btn btn-secondary btn-sm"
-                style={{ alignSelf: "flex-start" }}
+                style={{ marginTop: 8, alignSelf: "flex-start" }}
               >
                 {sendingTest ? "Sending…" : testResult === "sent" ? "Sent" : testResult === "failed" ? "Failed" : "Send Test Now"}
               </button>
             </div>
-          </>
+          </div>
         )}
         </div>
 
