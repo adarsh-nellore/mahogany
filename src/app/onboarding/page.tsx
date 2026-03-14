@@ -46,7 +46,8 @@ const DIGEST_CADENCE_OPTIONS = [
   { id: "weekly" as const, label: "Weekly", desc: "Monday recap" },
 ];
 
-const DIGEST_HOUR_OPTIONS = [6, 7, 8, 9];
+// Full 24-hour options to match digest page
+const DIGEST_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
 
 const TIMEZONE_OPTIONS = [
   { value: "America/New_York", label: "Eastern (US)" },
@@ -485,30 +486,29 @@ export default function OnboardingPage() {
                         ))}
                       </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 6 }}>Send at</div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        {DIGEST_HOUR_OPTIONS.map((h) => (
-                          <button
-                            key={h}
-                            type="button"
-                            onClick={() => setDigestSendHour(h)}
-                            style={{
-                              padding: "6px 12px",
-                              borderRadius: "var(--radius-md)",
-                              border: `1px solid ${digestSendHour === h ? "var(--color-primary)" : "var(--color-border)"}`,
-                              background: digestSendHour === h ? "var(--color-primary-subtle)" : "var(--color-surface-raised)",
-                              color: digestSendHour === h ? "var(--color-primary)" : "var(--color-fg-secondary)",
-                              fontSize: "var(--text-sm)",
-                              fontFamily: "var(--font-sans)",
-                              cursor: "pointer",
-                            }}
-                          >
-                            {h === 0 ? "12am" : h === 12 ? "12pm" : h < 12 ? `${h}am` : `${h - 12}pm`}
-                          </button>
-                        ))}
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 4 }}>Time</div>
+                        <select
+                          value={digestSendHour}
+                          onChange={(e) => setDigestSendHour(parseInt(e.target.value, 10))}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: "var(--radius-md)",
+                            border: "1px solid var(--color-border)",
+                            background: "var(--color-surface-raised)",
+                            color: "var(--color-fg)",
+                            fontSize: "var(--text-sm)",
+                            fontFamily: "var(--font-sans)",
+                            minWidth: 100,
+                          }}
+                        >
+                          {DIGEST_HOUR_OPTIONS.map((h) => (
+                            <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                          ))}
+                        </select>
                       </div>
-                      <div style={{ marginTop: 8 }}>
+                      <div>
                         <div style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", marginBottom: 4 }}>Timezone</div>
                         <select
                           value={timezone}

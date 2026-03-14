@@ -44,22 +44,26 @@ export default function Header() {
     : "?";
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  const isOnboarding = pathname?.startsWith("/onboarding");
 
   return (
     <header className="topbar" style={{ position: "sticky", top: 0, zIndex: 60 }}>
-      <Link href="/feed" className="topbar-brand" style={{ textDecoration: "none" }}>
+      <Link href={isOnboarding ? "/" : "/feed"} className="topbar-brand" style={{ textDecoration: "none" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand-mark.png" alt="" aria-hidden="true" width={32} height={32} style={{ flexShrink: 0, objectFit: "contain" }} />
         Mahogany
       </Link>
 
-      <nav className="topbar-nav">
-        <Link href="/feed" className={isActive("/feed") ? "active" : ""}>Feed</Link>
-        <Link href="/digest" className={isActive("/digest") ? "active" : ""}>Digest</Link>
-      </nav>
+      {!isOnboarding && (
+        <nav className="topbar-nav">
+          <Link href="/feed" className={isActive("/feed") ? "active" : ""}>Feed</Link>
+          <Link href="/digest" className={isActive("/digest") ? "active" : ""}>Digest</Link>
+        </nav>
+      )}
 
       <div style={{ flex: 1 }} />
 
+      {!isOnboarding && (
       <div ref={menuRef} style={{ position: "relative" }}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
@@ -111,6 +115,7 @@ export default function Header() {
             </div>
           )}
       </div>
+      )}
     </header>
   );
 }
