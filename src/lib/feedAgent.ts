@@ -402,7 +402,7 @@ STORY FORMAT — each story in the JSON array must have:
   * **What to watch / action items**: Concrete next steps for RA/QA professionals. Comment deadlines, implementation timelines, recommended actions.
   * Use **bold** for key terms, company names, and regulation numbers. Use [inline links](url) to source documents extensively.
 - "section": Your chosen thematic section name. REQUIRED. Must be specific and descriptive (see section rules above).
-- "severity": "high" (final rules, major safety alerts, product withdrawals, significant approvals), "medium" (draft guidance, consultations, routine approvals), "low" (news, analysis, workshops)
+- "severity": "high" (guidance changes—draft or final—final rules, major safety alerts, recalls, product withdrawals, significant approvals), "medium" (consultations, routine approvals, meeting highlights), "low" (news, analysis, workshops). Guidance changes have the highest regulatory implications — always "high".
 - "domains": array of "devices" and/or "pharma"
 - "regions": array of "US", "EU", "UK", "Canada", "Australia", "Japan", "Switzerland", "Global"
 - "therapeutic_areas": array of relevant TAs. Use standard labels: "oncology", "cardiology", "neurology", "orthopedics", "endocrinology", "immunology", "dermatology", "ophthalmology", "gastroenterology", "pulmonology", "hematology", "nephrology", "infectious disease", "rare disease", "wound care", "dental", "SaMD", "respiratory", "psychiatry", "pediatrics". BE COMPREHENSIVE — tag ALL that apply, even indirectly. A cardiac device recall must tag "cardiology". A diabetes drug must tag "endocrinology". Users filter by TA, so untagged stories are invisible to them.

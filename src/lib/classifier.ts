@@ -57,7 +57,7 @@ Rules:
 - "therapeutic_areas" should include ALL therapeutic areas that the signal could be relevant to. Be generous — if a drug treats heart failure, tag it "cardiology". If a device is used in orthopedic surgery, tag it "orthopedics". If a safety alert involves a chemotherapy drug, tag it "oncology" and "hematology". Only use empty [] for purely administrative signals with no clinical relevance (e.g. fee schedule changes, general cGMP guidance).
 - "product_types" should be empty [] if the signal is not specific to any product type.
 - "product_classes" should be empty [] if no device classification is mentioned.
-- For impact_severity: "high" = final rules, safety alerts, recalls, major approvals; "medium" = draft guidance, consultations, meeting highlights; "low" = general news, podcasts, workshops.
+- For impact_severity: "high" = guidance (draft or final), final rules, safety alerts, recalls, major approvals, legislation; "medium" = consultations, meeting highlights, routine approvals; "low" = general news, podcasts, workshops. Guidance changes have the highest regulatory implications — always use "high" for guidance_draft and guidance_final.
 - If the source authority is a test house (Intertek, UL, TÜV, BSI, DEKRA, SGS) or mentions IEC/ISO standards, set impact_type to "standard_update".
 - Region mapping by authority: Health Canada → "Canada", TGA → "Australia", PMDA → "Japan", Swissmedic → "Switzerland", IMDRF/WHO/ICH → "Global". Do NOT use "Global" for country-specific authorities.
 - The ai_analysis should be substantive and specific, NOT generic filler. Name companies, products, regulations, and implications.

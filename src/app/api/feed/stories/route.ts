@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import { FeedStory, Profile } from "@/lib/types";
 import { getAuthUser } from "@/lib/auth-guards";
 import { zipValidSourceLinks } from "@/lib/sourceUrl";
-import { isBlockedSource } from "@/lib/fetchers/sourceRegistry";
+import { isBlockedSource, storyImpactPriority } from "@/lib/fetchers/sourceRegistry";
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
@@ -35,17 +35,19 @@ export async function GET(request: NextRequest) {
     conditions.push(`is_global = true`);
   } else {
     const authUser = await getAuthUser(request);
-    const profileId = authUser?.id ?? null;
+    let profileId: string | null = null;
+    if (authUser?.id) {
+      const byId = await query<Profile>(`SELECT id FROM profiles WHERE id = $1 LIMIT 1`, [authUser.id]);
+      if (byId.length > 0) profileId = byId[0].id;
+    }
+    if (!profileId && authUser?.email) {
+      const byEmail = await query<Profile>(`SELECT id FROM profiles WHERE email = $1 LIMIT 1`, [authUser.email]);
+      if (byEmail.length > 0) profileId = byEmail[0].id;
+    }
     if (profileId) {
-      const profileRows = await query<Profile>(
-        `SELECT id FROM profiles WHERE id = $1`,
-        [profileId]
-      );
-      if (profileRows.length > 0) {
-        paramIdx++;
-        conditions.push(`(profile_id = $${paramIdx} OR is_global = true)`);
-        params.push(profileId);
-      }
+      paramIdx++;
+      conditions.push(`(profile_id = $${paramIdx} OR is_global = true)`);
+      params.push(profileId);
     } else {
       conditions.push(`is_global = true`);
     }
@@ -139,6 +141,10 @@ export async function GET(request: NextRequest) {
       const sa = sevOrder[a.severity] || 2;
       const sb = sevOrder[b.severity] || 2;
       if (sa !== sb) return sa - sb;
+      // Within same severity: guidance first, then recalls/legislation, then rest
+      const ia = storyImpactPriority(a.impact_types);
+      const ib = storyImpactPriority(b.impact_types);
+      if (ia !== ib) return ia - ib;
       return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
     });
 

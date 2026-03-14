@@ -15,7 +15,7 @@
 import { Signal, Profile, ImpactSeverity } from "./types";
 import { query } from "./db";
 import { getDerivedProfileArrays } from "./profileUtils";
-import { SOURCE_PRIORITY, SOURCE_PRIORITY_ORDER_SQL } from "./fetchers/sourceRegistry";
+import { SOURCE_PRIORITY, SOURCE_PRIORITY_ORDER_SQL, IMPACT_TYPE_ORDER_SQL } from "./fetchers/sourceRegistry";
 
 export type RelevanceTier = "must_see" | "digest" | "exploratory";
 
@@ -340,6 +340,7 @@ export async function fetchProductSignals(
      WHERE published_at > now() - interval '1 day' * $${uniqueTerms.length + 2}
        AND (${tsQueries.join(" OR ")})
      ORDER BY CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+              ${IMPACT_TYPE_ORDER_SQL},
               ${SOURCE_PRIORITY_ORDER_SQL},
               published_at DESC
      LIMIT $${uniqueTerms.length + 1}`,

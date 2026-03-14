@@ -40,14 +40,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
-    // If profile is missing or incomplete, tell client to redirect to onboarding
+    // If profile is missing or incomplete, tell client to redirect to onboarding.
+    // Check by both id and email — profile may have been created with different id during onboarding.
     const body: { success: boolean; redirectTo?: string } = { success: true };
     const userId = data.user?.id;
-    if (userId) {
-      const rows = await query<{ regions: string[]; domains: string[] }>(
-        `SELECT regions, domains FROM profiles WHERE id = $1 LIMIT 1`,
-        [userId]
-      );
+    const userEmail = data.user?.email;
+    if (userId || userEmail) {
+      let rows: { regions: string[]; domains: string[] }[] = [];
+      if (userId) {
+        rows = await query<{ regions: string[]; domains: string[] }>(
+          `SELECT regions, domains FROM profiles WHERE id = $1 LIMIT 1`,
+          [userId]
+        );
+      }
+      if (rows.length === 0 && userEmail) {
+        rows = await query<{ regions: string[]; domains: string[] }>(
+          `SELECT regions, domains FROM profiles WHERE email = $1 LIMIT 1`,
+          [userEmail]
+        );
+      }
       const needsOnboarding =
         rows.length === 0 ||
         (Array.isArray(rows[0]?.regions) && rows[0].regions.length === 0 &&

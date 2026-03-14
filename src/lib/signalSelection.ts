@@ -9,7 +9,7 @@
 import { query } from "./db";
 import { fetchProductSignals, scoreAndRank } from "./relevanceScorer";
 import { DISABLE_US_SOURCES } from "./experimentFlags";
-import { SOURCE_PRIORITY_ORDER_SQL } from "./fetchers/sourceRegistry";
+import { SOURCE_PRIORITY_ORDER_SQL, IMPACT_TYPE_ORDER_SQL } from "./fetchers/sourceRegistry";
 import { Profile, Signal } from "./types";
 
 export interface SelectSignalsOptions {
@@ -100,7 +100,7 @@ export async function selectSignalsForFeed(
     const regionWhere = baseWhere
       ? `${baseWhere} AND region = '${b.region}'`
       : `WHERE region = '${b.region}'`;
-    return `(SELECT * FROM signals ${regionWhere} ORDER BY ${SEVERITY_ORDER}, ${SOURCE_PRIORITY_ORDER_SQL}, published_at DESC LIMIT ${b.limit})`;
+    return `(SELECT * FROM signals ${regionWhere} ORDER BY ${SEVERITY_ORDER}, ${IMPACT_TYPE_ORDER_SQL}, ${SOURCE_PRIORITY_ORDER_SQL}, published_at DESC LIMIT ${b.limit})`;
   });
 
   const signals =

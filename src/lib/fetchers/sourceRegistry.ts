@@ -261,10 +261,57 @@ export const SOURCE_PRIORITY_ORDER_SQL =
     .map(([id, p]) => `WHEN source_id = '${String(id).replace(/'/g, "''")}' THEN ${p}`)
     .join(" ")} ELSE 3 END`;
 
+// ─── Impact type priority for content ordering ─────────────────────────────
+// Guidance changes are highest priority; then regulatory implications (recalls, legislation, etc.)
+// Lower number = higher priority (appears first)
+export const IMPACT_TYPE_PRIORITY: Record<string, number> = {
+  guidance_final: 0,
+  guidance_draft: 1,
+  legislation: 2,
+  recall: 3,
+  safety_alert: 4,
+  enforcement: 5,
+  approval: 6,
+  designation: 7,
+  advisory_committee: 8,
+  meeting_minutes: 9,
+  consultation: 10,
+  trial_update: 11,
+  standard_update: 12,
+  press_release: 13,
+  analysis: 14,
+  workshop: 15,
+  podcast: 16,
+  other: 99,
+};
+
+/** SQL ORDER BY fragment for signals (single impact_type): guidance first, then regulatory implications */
+export const IMPACT_TYPE_ORDER_SQL =
+  `CASE ${Object.entries(IMPACT_TYPE_PRIORITY)
+    .filter(([, p]) => p < 99)
+    .map(([t, p]) => `WHEN impact_type = '${String(t).replace(/'/g, "''")}' THEN ${p}`)
+    .join(" ")} ELSE 99 END`;
+
+/** Best (lowest) impact priority for a story with impact_types array. For feed sort. */
+export function storyImpactPriority(impactTypes?: string[] | null): number {
+  if (!impactTypes?.length) return 99;
+  const vals = impactTypes.map((t) => IMPACT_TYPE_PRIORITY[t] ?? 99);
+  return Math.min(...vals);
+}
+
 /** Source IDs and label patterns excluded from feed (e.g. removed sources). */
 export const BLOCKED_SOURCE_IDS = ["us_nyt_health_rss"] as const;
-export const BLOCKED_SOURCE_LABEL_PATTERNS = [/nyt/i, /new york times/i] as const;
-export const BLOCKED_SOURCE_URL_PATTERNS = [/nytimes\.com/i] as const;
+export const BLOCKED_SOURCE_LABEL_PATTERNS = [
+  /nyt/i,
+  /new york times/i,
+  /american heart association/i,
+  /heart\.org/i,
+] as const;
+export const BLOCKED_SOURCE_URL_PATTERNS = [
+  /nytimes\.com/i,
+  /heart\.org/i,
+  /americanheart\.org/i,
+] as const;
 
 export function isBlockedSource(story: { source_labels?: string[]; source_urls?: string[] }): boolean {
   if (story.source_labels?.some((l) => BLOCKED_SOURCE_LABEL_PATTERNS.some((p) => p.test(l)))) return true;
