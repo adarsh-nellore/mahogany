@@ -26,11 +26,37 @@ function getLocalHour(timezone: string): number {
   }
 }
 
+function getLocalDayOfWeek(timezone: string): number {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone || "UTC",
+      weekday: "short",
+    });
+    const parts = formatter.formatToParts(new Date());
+    const weekdayPart = parts.find((p) => p.type === "weekday");
+    const dayNames: Record<string, number> = {
+      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+    };
+    return weekdayPart ? (dayNames[weekdayPart.value] ?? 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function isInDigestHourWindow(localHour: number, digestSendHour: number): boolean {
-  const lo = (digestSendHour - 1 + 24) % 24;
-  const hi = (digestSendHour + 1) % 24;
+  const target = digestSendHour ?? 7;
+  const lo = (target - 1 + 24) % 24;
+  const hi = (target + 1) % 24;
   if (lo <= hi) return localHour >= lo && localHour <= hi;
   return localHour >= lo || localHour <= hi;
+}
+
+/** twice_weekly = Tue (2) & Fri (5); weekly = Mon (1). */
+function isDigestDayForCadence(localDayOfWeek: number, cadence: string): boolean {
+  if (cadence === "daily") return true;
+  if (cadence === "twice_weekly") return localDayOfWeek === 2 || localDayOfWeek === 5;
+  if (cadence === "weekly") return localDayOfWeek === 1;
+  return true;
 }
 
 export const maxDuration = 300;
@@ -59,8 +85,12 @@ async function sendDigests(): Promise<DigestSendSummary> {
     const profiles = candidates.filter((p) => {
       const tz = p.timezone || "UTC";
       const localHour = getLocalHour(tz);
+      const localDay = getLocalDayOfWeek(tz);
       const digestHour = p.digest_send_hour ?? 7;
-      return isInDigestHourWindow(localHour, digestHour);
+      return (
+        isInDigestHourWindow(localHour, digestHour) &&
+        isDigestDayForCadence(localDay, p.digest_cadence || "daily")
+      );
     });
 
     console.log(`[send-digests] ${profiles.length} profile(s) in digest hour window (of ${candidates.length} cadence-eligible)`);

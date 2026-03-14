@@ -3,9 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase-server";
 
 /**
  * Sign-up creates the auth user only. Profile is created when user completes onboarding.
- * For the desired flow (sign up → sign in → onboarding), disable email confirmation in
- * Supabase Dashboard: Authentication → Providers → Email → turn off "Confirm email".
- * If confirmation is enabled, the email link redirects to /auth/callback?next=/onboarding.
+ * We auto-confirm the user so they can sign in immediately — no email confirmation gate.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -38,11 +36,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sign-up failed" }, { status: 500 });
     }
 
-    // Profile is created when user completes onboarding (POST /api/profiles).
-    // No stub profile here — avoids showing an empty "default" profile.
+    // Auto-confirm so user can sign in immediately (no email confirmation gate)
+    let requiresEmailConfirmation = !data.session;
+    if (!data.session) {
+      const { error: confirmErr } = await supabase.auth.admin.updateUserById(data.user.id, {
+        email_confirm: true,
+      });
+      if (!confirmErr) {
+        requiresEmailConfirmation = false; // User can now sign in
+      } else {
+        console.warn("[api/auth/sign-up] auto-confirm failed, user must confirm via email:", confirmErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      requiresEmailConfirmation: !data.session,
+      requiresEmailConfirmation,
     });
   } catch (err) {
     console.error("[api/auth/sign-up]", err);

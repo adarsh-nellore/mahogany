@@ -133,7 +133,7 @@ export async function generateFeedForProfiles(
  * 3. Pulls a much larger, regionally balanced signal set so the agent
  *    has a richer knowledge graph to work with.
  */
-async function generate(): Promise<{ global_stories: number; profile_stories: Record<string, number>; signal_count: number }> {
+export async function generate(): Promise<{ global_stories: number; profile_stories: Record<string, number>; signal_count: number }> {
   const result = { global_stories: 0, profile_stories: {} as Record<string, number>, signal_count: 0 };
 
   const lastGenRow = await query<{ last: string }>(

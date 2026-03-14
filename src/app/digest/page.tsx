@@ -34,8 +34,8 @@ interface Profile {
 
 const CADENCE_OPTIONS = [
   { id: "daily", label: "Every morning" },
-  { id: "twice_weekly", label: "Twice a week" },
-  { id: "weekly", label: "Once a week" },
+  { id: "twice_weekly", label: "Twice a week (Tue & Fri)" },
+  { id: "weekly", label: "Once a week (Mon)" },
 ];
 const TIMEZONE_OPTIONS = [
   { value: "UTC", label: "UTC" },

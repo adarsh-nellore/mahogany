@@ -18,11 +18,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ### Supabase Auth: Signup → Onboarding Flow
 
-For the desired flow (sign up → sign in → onboarding, no email confirmation gate):
-
-1. In **Supabase Dashboard** → **Authentication** → **Providers** → **Email**, turn off **"Confirm email"**.
-2. With confirmation disabled, new users sign up, are auto-signed in, and go straight to onboarding.
-3. If you keep confirmation enabled, the verification link redirects to `/auth/callback?next=/onboarding` so users land on onboarding after confirming.
+Sign up → sign in → onboarding with no email confirmation gate. New users are auto-confirmed via the admin API so they can sign in immediately. Requires `SUPABASE_SERVICE_ROLE_KEY` for the auto-confirm step.
 
 ### Feed Seeding (Supabase)
 
