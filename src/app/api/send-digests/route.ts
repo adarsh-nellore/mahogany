@@ -59,7 +59,7 @@ function isDigestDayForCadence(localDayOfWeek: number, cadence: string): boolean
   return true;
 }
 
-export const maxDuration = 300;
+export const maxDuration = 600; // 10 min — digest sends can take 4+ min with LLM header per profile
 
 async function sendDigests(): Promise<DigestSendSummary> {
   const summary: DigestSendSummary = {
@@ -193,6 +193,37 @@ async function sendDigests(): Promise<DigestSendSummary> {
 export async function GET(request: Request) {
   if (!requireCronAuth(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const url = new URL(request.url);
+  if (url.searchParams.get("debug") === "1") {
+    try {
+      const candidates = await query<Profile>(
+        `SELECT id, email, name, timezone, digest_send_hour, digest_cadence, last_digest_at FROM profiles`
+      );
+      const now = new Date();
+      const debug = candidates.map((p) => {
+        const tz = p.timezone || "UTC";
+        const localHour = getLocalHour(tz);
+        const localDay = getLocalDayOfWeek(tz);
+        const digestHour = p.digest_send_hour ?? 7;
+        const inWindow = isInDigestHourWindow(localHour, digestHour);
+        const inDay = isDigestDayForCadence(localDay, p.digest_cadence || "daily");
+        const due = !p.last_digest_at ||
+          (p.digest_cadence === "daily" && new Date(p.last_digest_at) < new Date(now.getTime() - 20 * 60 * 60 * 1000)) ||
+          (p.digest_cadence === "twice_weekly" && new Date(p.last_digest_at) < new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)) ||
+          (p.digest_cadence === "weekly" && new Date(p.last_digest_at) < new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
+        const wouldSend = inWindow && inDay && due;
+        return { email: p.email, localHour, digestHour, inWindow, inDay, due, wouldSend };
+      });
+      return NextResponse.json({
+        utc: now.toISOString(),
+        resend_set: !!process.env.RESEND_API_KEY,
+        profiles: debug,
+        inWindow: debug.filter((d) => d.wouldSend).length,
+      });
+    } catch (e) {
+      return NextResponse.json({ error: String(e) }, { status: 500 });
+    }
   }
   try {
     const summary = await sendDigests();
