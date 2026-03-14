@@ -80,7 +80,7 @@ async function sendDigests(): Promise<DigestSendSummary> {
       `SELECT * FROM profiles
        WHERE (
          last_digest_at IS NULL
-         OR (digest_cadence = 'daily'        AND last_digest_at < now() - interval '20 hours')
+         OR (digest_cadence = 'daily'        AND last_digest_at < now() - interval '1 hour')
          OR (digest_cadence = 'twice_weekly'  AND last_digest_at < now() - interval '3 days')
          OR (digest_cadence = 'weekly'        AND last_digest_at < now() - interval '6 days')
        )`
@@ -209,7 +209,7 @@ export async function GET(request: Request) {
         const inWindow = isInDigestHourWindow(localHour, digestHour);
         const inDay = isDigestDayForCadence(localDay, p.digest_cadence || "daily");
         const due = !p.last_digest_at ||
-          (p.digest_cadence === "daily" && new Date(p.last_digest_at) < new Date(now.getTime() - 20 * 60 * 60 * 1000)) ||
+          (p.digest_cadence === "daily" && new Date(p.last_digest_at) < new Date(now.getTime() - 60 * 60 * 1000)) ||
           (p.digest_cadence === "twice_weekly" && new Date(p.last_digest_at) < new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)) ||
           (p.digest_cadence === "weekly" && new Date(p.last_digest_at) < new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
         const wouldSend = inWindow && inDay && due;
