@@ -101,12 +101,11 @@ export async function POST(request: NextRequest) {
       ]
     );
 
-    // result[0].id matches profileId we inserted (RETURNING id confirms the write)
-    void result[0].id;
+    const actualProfileId = result[0].id;
 
     if (body.intake_text && body.intake_text.trim().length > 0) {
       const parsed = await parseIntakeText(body.intake_text);
-      const session = await persistIntakeSession(body.intake_text, parsed, profileId);
+      const session = await persistIntakeSession(body.intake_text, parsed, actualProfileId);
       await persistIntakeMentions(session.id, parsed.mentions);
       const resolved = await resolveIntakeMentions(parsed.mentions);
       await persistIntakeEntityMappings(session.id, resolved);
@@ -119,18 +118,17 @@ export async function POST(request: NextRequest) {
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (profile_id, entity_id, watch_type) DO UPDATE
            SET priority = EXCLUDED.priority`,
-          [profileId, r.entity_id, watchType, priority]
+          [actualProfileId, r.entity_id, watchType, priority]
         );
       }
 
       const policy = await buildPolicyFromSession(session.id);
-      await persistProfilePolicy(profileId, policy);
-      kickoffIntakeWorkflow(profileId, body.intake_text).catch((err) =>
+      await persistProfilePolicy(actualProfileId, policy);
+      kickoffIntakeWorkflow(actualProfileId, body.intake_text).catch((err) =>
         console.error("[profiles] temporal intake workflow failed:", err)
       );
     }
 
-    // Fire-and-forget: trigger feed story generation for this new profile
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
       "http://localhost:3000";
@@ -138,11 +136,11 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     }).catch((err) => console.error("[profiles] feed generation trigger failed:", err));
-    kickoffProfileRefreshWorkflow(profileId).catch((err) =>
+    kickoffProfileRefreshWorkflow(actualProfileId).catch((err) =>
       console.error("[profiles] temporal profile refresh failed:", err)
     );
 
-    return NextResponse.json({ id: profileId, message: "Profile saved" });
+    return NextResponse.json({ id: actualProfileId, message: "Profile saved" });
   } catch (err) {
     console.error("[api/profiles] error:", err);
     return NextResponse.json(
