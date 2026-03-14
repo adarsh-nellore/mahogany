@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
 import { REGION_OPTIONS } from "@/lib/feedFilters";
@@ -86,6 +87,7 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
 }
 
 export default function DigestPage() {
+  const router = useRouter();
   const [digests, setDigests] = useState<DigestListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -110,14 +112,22 @@ export default function DigestPage() {
     fetch("/api/profiles/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => {
-        if (p) {
-          setProfile(p);
-          initialLoadRef.current = true;
-          setTimeout(() => { initialLoadRef.current = false; }, 400);
+        if (!p) {
+          router.replace("/onboarding");
+          return;
         }
+        const regions = p.regions || [];
+        const domains = p.domains || [];
+        if (regions.length === 0 || domains.length === 0) {
+          router.replace("/onboarding");
+          return;
+        }
+        setProfile(p);
+        initialLoadRef.current = true;
+        setTimeout(() => { initialLoadRef.current = false; }, 400);
       })
       .catch(() => {});
-  }, []);
+  }, [router]);
 
   const save = useCallback(async (p: Profile) => {
     try {

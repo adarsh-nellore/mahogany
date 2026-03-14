@@ -19,7 +19,7 @@ interface NamedFetcher {
 /** Generate NamedFetcher[] for all RSS-tier registry entries (no custom files). */
 export function registryRSSFetchers(): NamedFetcher[] {
   return REGISTRY
-    .filter((s) => s.tier === "rss" && !s.customFetcher && (!DISABLE_US_SOURCES || s.region_hint !== "US"))
+    .filter((s) => s.enabled !== false && s.tier === "rss" && !s.customFetcher && (!DISABLE_US_SOURCES || s.region_hint !== "US"))
     .map((s) => ({
       name: s.source_id,
       fn: () =>
@@ -37,7 +37,7 @@ export function registryRSSFetchers(): NamedFetcher[] {
 /** Generate NamedFetcher[] for all Firecrawl-tier registry entries (no custom files). */
 export function registryFirecrawlFetchers(): NamedFetcher[] {
   return REGISTRY
-    .filter((s) => s.tier === "firecrawl" && !s.customFetcher && (!DISABLE_US_SOURCES || s.region_hint !== "US"))
+    .filter((s) => s.enabled !== false && s.tier === "firecrawl" && !s.customFetcher && (!DISABLE_US_SOURCES || s.region_hint !== "US"))
     .map((s) => ({
       name: s.source_id,
       fn: () =>

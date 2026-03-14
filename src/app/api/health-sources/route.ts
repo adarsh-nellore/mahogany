@@ -22,8 +22,9 @@ import { getRecentSchemaChanges } from "@/lib/sourceChangeDetector";
 export const maxDuration = 120;
 
 // Derive the source list from REGISTRY (single source of truth)
+// Only count enabled sources toward the 70% minimum
 const ALL_SOURCES: { id: string; label: string; tier: "api" | "rss" | "scrape" }[] =
-  REGISTRY.map((s) => ({
+  REGISTRY.filter((s) => s.enabled !== false).map((s) => ({
     id: s.source_id,
     label: s.label,
     tier: s.tier === "firecrawl" ? "scrape" as const : s.tier,
@@ -101,9 +102,18 @@ export async function GET(request: NextRequest) {
     });
 
     // Summary counts
+    const activeCount = sources.filter((s) => s.status === "active").length;
+    const totalSources = sources.length;
+    const activeRatio = totalSources > 0 ? activeCount / totalSources : 0;
+    const MINIMUM_ACTIVE_RATIO = 0.7;
+
     const summary = {
-      total: sources.length,
-      active: sources.filter((s) => s.status === "active").length,
+      total: totalSources,
+      active: activeCount,
+      active_count: activeCount,
+      total_sources: totalSources,
+      active_ratio: Math.round(activeRatio * 1000) / 1000,
+      below_70_minimum: activeRatio < MINIMUM_ACTIVE_RATIO,
       warning: sources.filter((s) => s.status === "warning").length,
       dark: sources.filter((s) => s.status === "dark").length,
       firecrawl_configured: !!process.env.FIRECRAWL_API_KEY,
@@ -139,6 +149,12 @@ export async function GET(request: NextRequest) {
         { source_id: "ca_hc_recalls", check_url: "https://recalls-rappels.canada.ca/en/feed/health-products-alerts-recalls" },
       ];
       liveTests = await checkMultipleSources(criticalSources);
+    }
+
+    if (summary.below_70_minimum) {
+      console.warn(
+        `[health-sources] BELOW 70% MINIMUM: ${activeCount}/${totalSources} sources active (${(activeRatio * 100).toFixed(1)}%)`
+      );
     }
 
     // Get alerts: failing sources + schema changes

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { REGISTRY } from "@/lib/fetchers/sourceRegistry";
 
 export async function GET(request: NextRequest) {
   const period = request.nextUrl.searchParams.get("period") || "7d";
   const intervalDays = period === "30d" ? 30 : 7;
 
   try {
-    const [sourceMetrics, agentRuns, exceptions, freshness, totals] = await Promise.all([
+    const [sourceMetrics, agentRuns, exceptions, freshness, sourceHealth, totals] = await Promise.all([
       // Source-level fetch metrics
       query<{
         source_id: string;
@@ -97,6 +98,48 @@ export async function GET(request: NextRequest) {
         ORDER BY hours_since_last DESC`
       ),
 
+      // Source health (70% minimum)
+      (async () => {
+        const enabledSources = REGISTRY.filter((s) => s.enabled !== false);
+        const rows = await query<{
+          source_id: string;
+          signal_count_14d: number;
+          last_signal_at: string | null;
+        }>(
+          `SELECT source_id, count(*)::int as signal_count_14d, max(created_at)::text as last_signal_at
+           FROM signals WHERE created_at > now() - interval '14 days'
+           GROUP BY source_id`
+        );
+        const statsMap = new Map(rows.map((r) => [r.source_id, r]));
+        let activeCount = 0;
+        const darkSources: string[] = [];
+        const warningSources: string[] = [];
+        for (const s of enabledSources) {
+          const stats = statsMap.get(s.source_id);
+          const tier = s.tier === "firecrawl" ? "scrape" : s.tier;
+          const warningThresholdHours = tier === "scrape" ? 168 : 72;
+          const darkThresholdHours = tier === "scrape" ? 336 : 168;
+          if (!stats?.last_signal_at) {
+            darkSources.push(s.source_id);
+            continue;
+          }
+          const ageHours = (Date.now() - new Date(stats.last_signal_at).getTime()) / 3_600_000;
+          if (ageHours < warningThresholdHours) activeCount++;
+          else if (ageHours < darkThresholdHours) warningSources.push(s.source_id);
+          else darkSources.push(s.source_id);
+        }
+        const totalSources = enabledSources.length;
+        const activeRatio = totalSources > 0 ? activeCount / totalSources : 0;
+        return {
+          active_count: activeCount,
+          total_sources: totalSources,
+          active_ratio: Math.round(activeRatio * 1000) / 1000,
+          below_70_minimum: activeRatio < 0.7,
+          dark_sources: darkSources,
+          warning_sources: warningSources,
+        };
+      })(),
+
       // 24h totals
       query<{
         total_diagnostics_24h: number;
@@ -117,6 +160,7 @@ export async function GET(request: NextRequest) {
       agent_runs: agentRuns,
       exceptions,
       freshness,
+      source_health: sourceHealth,
       totals: totals[0] || {
         total_diagnostics_24h: 0,
         total_exceptions_24h: 0,

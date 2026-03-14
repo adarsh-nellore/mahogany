@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-server";
-import { query } from "@/lib/db";
 
+/**
+ * Sign-up creates the auth user only. Profile is created when user completes onboarding.
+ * For the desired flow (sign up → sign in → onboarding), disable email confirmation in
+ * Supabase Dashboard: Authentication → Providers → Email → turn off "Confirm email".
+ * If confirmation is enabled, the email link redirects to /auth/callback?next=/onboarding.
+ */
 export async function POST(request: NextRequest) {
   try {
     const { email, password, name } = await request.json();
@@ -14,29 +19,27 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createSupabaseAdminClient();
+    const origin = request.nextUrl.origin;
+    const emailRedirectTo = `${origin}/auth/callback?next=/onboarding`;
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo,
+        data: { name: name.trim() },
+      },
+    });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const userId = data.user?.id;
-    if (!userId) {
+    if (!data.user?.id) {
       return NextResponse.json({ error: "Sign-up failed" }, { status: 500 });
     }
 
-    // Create a minimal profile row with id = Supabase auth user id.
-    // ON CONFLICT handles re-registration with the same email.
-    await query(
-      `INSERT INTO profiles (id, email, name, regions, domains, therapeutic_areas,
-         product_types, tracked_products, role, organization, active_submissions,
-         competitors, regulatory_frameworks, digest_cadence, digest_send_hour, timezone)
-       VALUES ($1, $2, $3, '{}', '{}', '{}', '{}', '{}', '', '', '{}', '{}', '{}',
-               'daily', 7, 'UTC')
-       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, updated_at = now()`,
-      [userId, email.toLowerCase().trim(), name.trim()]
-    );
-
+    // Profile is created when user completes onboarding (POST /api/profiles).
+    // No stub profile here — avoids showing an empty "default" profile.
     return NextResponse.json({
       success: true,
       requiresEmailConfirmation: !data.session,

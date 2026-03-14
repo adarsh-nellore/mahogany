@@ -29,8 +29,9 @@ function LoginForm() {
         setLoading(false);
         return;
       }
-      const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/feed";
-      router.push(safeNext);
+      // Use redirectTo from API when profile needs onboarding; otherwise use next param
+      const destination = data.redirectTo ?? (next.startsWith("/") && !next.startsWith("//") ? next : "/feed");
+      router.push(destination);
     } catch (err) {
       setError(String(err));
       setLoading(false);

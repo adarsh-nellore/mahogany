@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { requireCronAuth } from "@/lib/cron-auth";
 import { runFeedAgent } from "@/lib/feedAgent";
 import { DISABLE_US_SOURCES } from "@/lib/experimentFlags";
+import { SOURCE_PRIORITY_ORDER_SQL } from "@/lib/fetchers/sourceRegistry";
 import { Signal, Profile } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -25,7 +26,7 @@ export async function loadFeedSignals(): Promise<Signal[]> {
   const signalWindowDays = 30;
   const unionParts = regionBuckets.map(
     (b) =>
-      `(SELECT * FROM signals WHERE region = '${b.region}' AND created_at > now() - interval '${signalWindowDays} days' ORDER BY ${severityOrder}, published_at DESC LIMIT ${b.limit})`
+      `(SELECT * FROM signals WHERE region = '${b.region}' AND created_at > now() - interval '${signalWindowDays} days' ORDER BY ${severityOrder}, ${SOURCE_PRIORITY_ORDER_SQL}, published_at DESC LIMIT ${b.limit})`
   );
   return unionParts.length > 0 ? await query<Signal>(unionParts.join("\n UNION ALL\n")) : [];
 }

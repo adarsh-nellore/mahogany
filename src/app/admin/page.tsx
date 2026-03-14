@@ -33,11 +33,21 @@ interface FreshnessLag {
   signal_count_7d: number;
 }
 
+interface SourceHealth {
+  active_count: number;
+  total_sources: number;
+  active_ratio: number;
+  below_70_minimum: boolean;
+  dark_sources: string[];
+  warning_sources: string[];
+}
+
 interface AdminData {
   source_metrics: SourceMetrics[];
   agent_runs: AgentRunSummary[];
   exceptions: ExceptionSummary[];
   freshness: FreshnessLag[];
+  source_health?: SourceHealth;
   totals: {
     total_diagnostics_24h: number;
     total_exceptions_24h: number;
@@ -127,6 +137,43 @@ export default function AdminPage() {
           </button>
         </div>
       </div>
+
+      {/* Source health (70% minimum) */}
+      {data.source_health && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold mb-3">Source Health (70% Minimum)</h2>
+          <div
+            className={`card card-body flex flex-row items-center justify-between ${
+              data.source_health.below_70_minimum ? "border-red-500 bg-red-50" : "border-green-200 bg-green-50"
+            }`}
+          >
+            <div className="flex items-center gap-4">
+              <span
+                className={`text-2xl font-bold ${
+                  data.source_health.below_70_minimum ? "text-red-700" : "text-green-700"
+                }`}
+              >
+                {(data.source_health.active_ratio * 100).toFixed(1)}%
+              </span>
+              <span className="text-gray-600">
+                {data.source_health.active_count} / {data.source_health.total_sources} sources active
+              </span>
+            </div>
+            <span
+              className={`badge ${
+                data.source_health.below_70_minimum ? "badge-danger" : "badge-success"
+              }`}
+            >
+              {data.source_health.below_70_minimum ? "BELOW MINIMUM" : "OK"}
+            </span>
+          </div>
+          {(data.source_health.dark_sources.length > 0 || data.source_health.warning_sources.length > 0) && (
+            <p className="text-sm text-gray-500 mt-2">
+              Dark: {data.source_health.dark_sources.length} · Warning: {data.source_health.warning_sources.length}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4 mb-8">

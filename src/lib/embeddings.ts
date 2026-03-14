@@ -149,18 +149,41 @@ export async function storeSignalEmbeddings(
   );
 }
 
+const BODY_TRUNCATE_CHARS = 1500; // ~500 tokens when body included in chunk 0
+
 /**
- * Embed and store a batch of signals. Used by the ingestion pipeline.
+ * Extract body text from raw_payload when available (e.g. Firecrawl content/markdown).
+ */
+export function extractBodyFromRawPayload(payload: Record<string, unknown> | null): string {
+  if (!payload || typeof payload !== "object") return "";
+  const raw = (payload.content ?? payload.markdown ?? payload.body) as string | undefined;
+  if (typeof raw !== "string" || !raw.trim()) return "";
+  return raw.trim().slice(0, BODY_TRUNCATE_CHARS);
+}
+
+/**
+ * Embed and store a batch of signals. Used by the ingestion pipeline and embed-backfill.
+ * When body text exists (e.g. from Firecrawl raw_payload), include it for richer semantic search.
  */
 export async function embedAndStoreSignals(
-  signals: { id: string; title: string; summary: string; ai_analysis: string }[]
+  signals: {
+    id: string;
+    title: string;
+    summary: string;
+    ai_analysis: string;
+    body?: string;
+  }[]
 ): Promise<number> {
   if (signals.length === 0) return 0;
 
-  // Build chunk 0 for each signal
-  const texts = signals.map((s) =>
-    [s.title, s.summary, s.ai_analysis].filter(Boolean).join(". ")
-  );
+  // Build chunk 0 for each signal: title + summary + ai_analysis + optional body
+  const texts = signals.map((s) => {
+    const parts = [s.title, s.summary, s.ai_analysis].filter(Boolean);
+    if (s.body && s.body.trim()) {
+      parts.push(s.body.trim().slice(0, BODY_TRUNCATE_CHARS));
+    }
+    return parts.join(". ");
+  });
 
   const embeddings = await embedBatch(texts);
 

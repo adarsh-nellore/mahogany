@@ -112,7 +112,7 @@ export default function OnboardingPage() {
     }
   }, []);
 
-  // Pre-fill name/email from profile when user is authenticated (e.g. from signup)
+  // Pre-fill name/email from profile or auth session (e.g. from signup)
   useEffect(() => {
     fetch("/api/profiles/me")
       .then((r) => (r.ok ? r.json() : null))
@@ -120,7 +120,16 @@ export default function OnboardingPage() {
         if (p) {
           if (p.name) setName(p.name);
           if (p.email) setEmail(p.email);
+          return;
         }
+        // No profile yet — use auth session (signup stores name in user_metadata)
+        fetch("/api/auth/me")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((a) => {
+            if (a?.name) setName(a.name);
+            if (a?.email) setEmail(a.email);
+          })
+          .catch(() => {});
       })
       .catch(() => {});
   }, []);

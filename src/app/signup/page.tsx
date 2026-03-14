@@ -139,7 +139,7 @@ export default function SignupPage() {
                 We sent a confirmation link to <strong>{email}</strong>. Click the link to verify your account, then you can sign in and complete your profile.
               </p>
               <Link
-                href="/login"
+                href="/login?next=/onboarding"
                 className="btn btn-primary btn-md"
                 style={{ width: "100%", textAlign: "center", textDecoration: "none" }}
               >

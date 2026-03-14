@@ -1,7 +1,10 @@
 import { query } from "@/lib/db";
 import { classifySignal } from "@/lib/classifier";
 import { filterWithExceptions, resetContentHashCache } from "@/lib/contentQualityGate";
-import { embedAndStoreSignals } from "@/lib/embeddings";
+import {
+  embedAndStoreSignals,
+  extractBodyFromRawPayload,
+} from "@/lib/embeddings";
 import { SignalDraft, IngestionSummary } from "@/lib/types";
 
 /**
@@ -55,68 +58,107 @@ export async function classifyAndStore(
   }).catch(() => {});
   // #endregion
 
-  for (const draft of cleanDrafts) {
-    try {
-      const existing = await query(
-        `SELECT id FROM raw_events WHERE url = $1 LIMIT 1`,
-        [draft.url]
-      );
+  const CLASSIFY_BATCH_SIZE = 15;
+  const urlToDraft = new Map(cleanDrafts.map((d) => [d.url, d]));
 
-      let rawEventId: string;
-
-      if (existing.length > 0) {
-        rawEventId = existing[0].id;
-      } else {
-        const inserted = await query<{ id: string }>(
-          `INSERT INTO raw_events (source_id, url, title, raw_payload)
-           VALUES ($1, $2, $3, $4)
-           RETURNING id`,
-          [draft.source_id, draft.url, draft.title, JSON.stringify(draft.raw_payload)]
-        );
-        rawEventId = inserted[0].id;
-        summary.total_raw_events++;
-      }
-
-      const existingSignal = await query(
-        `SELECT id FROM signals WHERE raw_event_id = $1 LIMIT 1`,
-        [rawEventId]
-      );
-      if (existingSignal.length > 0) continue;
-
-      const signal = await classifySignal(draft, rawEventId);
-
-      await query(
-        `INSERT INTO signals (
-          raw_event_id, source_id, url, title, summary, published_at,
-          authority, document_id, region, domains, therapeutic_areas,
-          product_types, product_classes, lifecycle_stage, impact_type,
-          impact_severity, ai_analysis
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+  // 1. Bulk fetch existing raw_events by URL
+  const urls = [...urlToDraft.keys()];
+  const existingRaw =
+    urls.length > 0
+      ? await query<{ id: string; url: string }>(
+          `SELECT id, url FROM raw_events WHERE url = ANY($1)`,
+          [urls]
         )
-        ON CONFLICT (document_id, authority)
-          WHERE document_id IS NOT NULL
-        DO UPDATE SET
-          title = EXCLUDED.title,
-          summary = EXCLUDED.summary,
-          impact_severity = EXCLUDED.impact_severity,
-          ai_analysis = EXCLUDED.ai_analysis`,
-        [
-          rawEventId, signal.source_id, signal.url, signal.title,
-          signal.summary, signal.published_at, signal.authority,
-          signal.document_id, signal.region, signal.domains,
-          signal.therapeutic_areas, signal.product_types, signal.product_classes,
-          signal.lifecycle_stage, signal.impact_type, signal.impact_severity,
-          signal.ai_analysis,
-        ]
-      );
+      : [];
+  const urlToRawEventId = new Map(existingRaw.map((r) => [r.url, r.id]));
 
-      summary.total_signals++;
-      summary.by_source[draft.source_id] = (summary.by_source[draft.source_id] || 0) + 1;
-    } catch (draftErr) {
-      const msg = `Draft error (${draft.source_id}): ${draftErr}`;
-      console.error(`[ingestion] ${msg}`);
-      summary.errors.push(msg);
+  // 2. Insert missing raw_events
+  const toInsertRaw: SignalDraft[] = [];
+  for (const draft of cleanDrafts) {
+    if (!urlToRawEventId.has(draft.url)) {
+      toInsertRaw.push(draft);
+    }
+  }
+  for (const draft of toInsertRaw) {
+    try {
+      const inserted = await query<{ id: string }>(
+        `INSERT INTO raw_events (source_id, url, title, raw_payload)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id`,
+        [draft.source_id, draft.url, draft.title, JSON.stringify(draft.raw_payload)]
+      );
+      urlToRawEventId.set(draft.url, inserted[0].id);
+      summary.total_raw_events++;
+    } catch (err) {
+      console.error(`[ingestion] raw_event insert error (${draft.source_id}):`, err);
+      summary.errors.push(`raw_event: ${draft.source_id}`);
+      urlToDraft.delete(draft.url);
+    }
+  }
+
+  // 3. Bulk fetch existing signals by raw_event_id
+  const rawEventIds = cleanDrafts
+    .map((d) => urlToRawEventId.get(d.url))
+    .filter((id): id is string => !!id);
+  const existingSignals =
+    rawEventIds.length > 0
+      ? await query<{ raw_event_id: string }>(
+          `SELECT raw_event_id FROM signals WHERE raw_event_id = ANY($1)`,
+          [rawEventIds]
+        )
+      : [];
+  const hasSignal = new Set(existingSignals.map((s) => s.raw_event_id));
+
+  // 4. Drafts needing classification
+  const toClassify: { draft: SignalDraft; rawEventId: string }[] = [];
+  for (const draft of cleanDrafts) {
+    const rawEventId = urlToRawEventId.get(draft.url);
+    if (!rawEventId || hasSignal.has(rawEventId)) continue;
+    toClassify.push({ draft, rawEventId });
+  }
+
+  // 5. Classify in parallel batches
+  for (let i = 0; i < toClassify.length; i += CLASSIFY_BATCH_SIZE) {
+    const batch = toClassify.slice(i, i + CLASSIFY_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(({ draft, rawEventId }) => classifySignal(draft, rawEventId))
+    );
+    for (let j = 0; j < batch.length; j++) {
+      const { draft } = batch[j];
+      const signal = results[j];
+      try {
+        await query(
+          `INSERT INTO signals (
+            raw_event_id, source_id, url, title, summary, published_at,
+            authority, document_id, region, domains, therapeutic_areas,
+            product_types, product_classes, lifecycle_stage, impact_type,
+            impact_severity, ai_analysis
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+          )
+          ON CONFLICT (document_id, authority)
+            WHERE document_id IS NOT NULL
+          DO UPDATE SET
+            title = EXCLUDED.title,
+            summary = EXCLUDED.summary,
+            impact_severity = EXCLUDED.impact_severity,
+            ai_analysis = EXCLUDED.ai_analysis`,
+          [
+            signal.raw_event_id, signal.source_id, signal.url, signal.title,
+            signal.summary, signal.published_at, signal.authority,
+            signal.document_id, signal.region, signal.domains,
+            signal.therapeutic_areas, signal.product_types, signal.product_classes,
+            signal.lifecycle_stage, signal.impact_type, signal.impact_severity,
+            signal.ai_analysis,
+          ]
+        );
+        summary.total_signals++;
+        summary.by_source[draft.source_id] = (summary.by_source[draft.source_id] || 0) + 1;
+      } catch (draftErr) {
+        const msg = `Draft error (${draft.source_id}): ${draftErr}`;
+        console.error(`[ingestion] ${msg}`);
+        summary.errors.push(msg);
+      }
     }
   }
 
@@ -124,13 +166,27 @@ export async function classifyAndStore(
   if (summary.total_signals > 0 && process.env.OPENAI_API_KEY) {
     try {
       const recentSignals = await query<{
-        id: string; title: string; summary: string; ai_analysis: string;
+        id: string;
+        title: string;
+        summary: string;
+        ai_analysis: string;
+        raw_payload: Record<string, unknown>;
       }>(
-        `SELECT id, title, summary, ai_analysis FROM signals
-         ORDER BY created_at DESC LIMIT $1`,
+        `SELECT s.id, s.title, s.summary, s.ai_analysis,
+                COALESCE(re.raw_payload, '{}')::jsonb AS raw_payload
+         FROM signals s
+         LEFT JOIN raw_events re ON re.id = s.raw_event_id
+         ORDER BY s.created_at DESC LIMIT $1`,
         [summary.total_signals]
       );
-      const embedded = await embedAndStoreSignals(recentSignals);
+      const withBody = recentSignals.map((s) => ({
+        id: s.id,
+        title: s.title,
+        summary: s.summary,
+        ai_analysis: s.ai_analysis,
+        body: extractBodyFromRawPayload(s.raw_payload),
+      }));
+      const embedded = await embedAndStoreSignals(withBody);
       console.log(`[ingestion] embedded ${embedded} signals`);
     } catch (embedErr) {
       console.error(`[ingestion] embedding failed (non-fatal): ${embedErr}`);

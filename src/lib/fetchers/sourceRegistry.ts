@@ -33,6 +33,8 @@ export interface SourceDef {
   maxItems?: number;
   /** Firecrawl: custom AI extraction prompt. */
   extractPrompt?: string;
+  /** false = skip fetching (chronically broken). Default true. */
+  enabled?: boolean;
 }
 
 // ─── REGISTRY ────────────────────────────────────────────────────────────────
@@ -136,7 +138,7 @@ export const REGISTRY: SourceDef[] = [
   { source_id: "us_endpoints_rss",            label: "Endpoints News",                  url: "https://endpts.com/feed/",                                                                           authority: "Endpoints News", region_hint: "US", domain_hint: "pharma", tier: "rss", priority: 2 },
   { source_id: "us_fierce_pharma_rss",        label: "FiercePharma",                    url: "https://www.fiercepharma.com/rss/xml",                                                               authority: "FiercePharma", region_hint: "US", domain_hint: "pharma",   tier: "rss", priority: 2 },
   { source_id: "us_fierce_biotech_rss",       label: "FierceBiotech",                   url: "https://www.fiercebiotech.com/rss/xml",                                                              authority: "FierceBiotech", region_hint: "US", domain_hint: "pharma",  tier: "rss", priority: 2 },
-  { source_id: "us_nyt_health_rss",           label: "NYT Health",                      url: "https://rss.nytimes.com/services/xml/rss/nyt/Health.xml",                                             authority: "NYT",          region_hint: "US", domain_hint: null,       tier: "rss", priority: 3 },
+  // Removed: us_nyt_health_rss — consumer health news, not regulatory; diluted front-page quality
 
   // ── Wire Service / Company Press Release RSS (new) ────────────────────
   { source_id: "wire_globenewswire_pharma",   label: "GlobeNewswire Pharma",            url: "https://www.globenewswire.com/RssFeed/subjectcode/14-Medical%20Pharmaceuticals/feedTitle/GlobeNewswire%20-%20Medical%20Pharmaceuticals", authority: "GlobeNewswire", region_hint: "Global", domain_hint: "pharma", tier: "rss", priority: 3 },
@@ -246,6 +248,18 @@ export const REGISTRY: SourceDef[] = [
   { source_id: "standards_ul",                label: "UL Solutions Insights",            url: "https://www.ul.com/insights?topics=medical-devices",                                             authority: "UL Solutions", region_hint: "Global", domain_hint: "devices", tier: "firecrawl", priority: 3 },
   { source_id: "standards_intertek",          label: "Intertek Regulatory Updates",      url: "https://www.intertek.com/medical/regulatory-updates/",                                           authority: "Intertek",     region_hint: "Global", domain_hint: "devices", tier: "firecrawl", priority: 3 },
 ];
+
+// ─── Source priority for signal selection ───────────────────────────────────
+// 1 = critical (health authorities), 2 = important, 3 = supplementary
+export const SOURCE_PRIORITY: Record<string, 1 | 2 | 3> = Object.fromEntries(
+  REGISTRY.map((s) => [s.source_id, s.priority])
+);
+
+/** SQL ORDER BY fragment: CASE WHEN source_id = 'x' THEN priority ... ELSE 3 END */
+export const SOURCE_PRIORITY_ORDER_SQL =
+  `CASE ${Object.entries(SOURCE_PRIORITY)
+    .map(([id, p]) => `WHEN source_id = '${String(id).replace(/'/g, "''")}' THEN ${p}`)
+    .join(" ")} ELSE 3 END`;
 
 // ─── Backward-compat: SOURCE_CHECK_URLS ──────────────────────────────────────
 // Computed view from REGISTRY for health-check consumers.

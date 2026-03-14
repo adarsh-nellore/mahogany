@@ -15,6 +15,7 @@
 import { Signal, Profile, ImpactSeverity } from "./types";
 import { query } from "./db";
 import { getDerivedProfileArrays } from "./profileUtils";
+import { SOURCE_PRIORITY, SOURCE_PRIORITY_ORDER_SQL } from "./fetchers/sourceRegistry";
 
 export type RelevanceTier = "must_see" | "digest" | "exploratory";
 
@@ -67,6 +68,12 @@ export async function scoreSignals(
 /**
  * Score and sort signals, returning only signals above minimum threshold.
  */
+const RELEVANCE_TIE_EPSILON = 0.05;
+
+function getSourcePriority(sourceId: string): number {
+  return SOURCE_PRIORITY[sourceId] ?? 3;
+}
+
 export async function scoreAndRank(
   signals: Signal[],
   profile: Profile,
@@ -78,7 +85,12 @@ export async function scoreAndRank(
 
   return scored
     .filter((s) => s.relevanceScore >= minScore)
-    .sort((a, b) => b.relevanceScore - a.relevanceScore);
+    .sort((a, b) => {
+      const scoreDiff = b.relevanceScore - a.relevanceScore;
+      if (Math.abs(scoreDiff) >= RELEVANCE_TIE_EPSILON) return scoreDiff;
+      // Tiebreaker: prefer higher-priority sources (1 before 2 before 3)
+      return getSourcePriority(a.signal.source_id) - getSourcePriority(b.signal.source_id);
+    });
 }
 
 function getTier(score: number): RelevanceTier {
@@ -328,6 +340,7 @@ export async function fetchProductSignals(
      WHERE published_at > now() - interval '1 day' * $${uniqueTerms.length + 2}
        AND (${tsQueries.join(" OR ")})
      ORDER BY CASE impact_severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+              ${SOURCE_PRIORITY_ORDER_SQL},
               published_at DESC
      LIMIT $${uniqueTerms.length + 1}`,
     params

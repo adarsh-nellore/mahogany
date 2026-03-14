@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Breadcrumbs from "@/components/Breadcrumbs";
 
@@ -36,6 +37,7 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,14 +47,22 @@ export default function ProfilePage() {
     fetch("/api/profiles/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => {
-        if (p) {
-          setProfile(p);
-          initialLoadRef.current = true;
-          setTimeout(() => { initialLoadRef.current = false; }, 400);
+        if (!p) {
+          router.replace("/onboarding");
+          return;
         }
+        const regions = p.regions || [];
+        const domains = p.domains || [];
+        if (regions.length === 0 || domains.length === 0) {
+          router.replace("/onboarding");
+          return;
+        }
+        setProfile(p);
+        initialLoadRef.current = true;
+        setTimeout(() => { initialLoadRef.current = false; }, 400);
       })
       .catch(() => {});
-  }, []);
+  }, [router]);
 
   const save = useCallback(async (p: Profile) => {
     try {

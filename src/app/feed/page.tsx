@@ -269,11 +269,14 @@ export default function FeedPage() {
     fetch("/api/profiles/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => {
-        if (!p) return;
+        if (!p) {
+          router.replace("/onboarding");
+          return;
+        }
         const regions = p.regions || [];
         const domains = p.domains || [];
         if (regions.length === 0 || domains.length === 0) {
-          router.push("/onboarding");
+          router.replace("/onboarding");
           return;
         }
         setProfile(p);
