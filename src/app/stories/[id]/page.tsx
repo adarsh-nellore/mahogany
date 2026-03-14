@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
-import { getHeroImage } from "@/lib/heroImages";
+import { getHeroImageForStory } from "@/lib/heroImages";
 import { isValidSourceUrl } from "@/lib/sourceUrl";
 
 interface FeedStory {
@@ -65,7 +65,7 @@ function freshnessLabel(dateStr: string): { text: string; isNew: boolean } {
 }
 
 function storyImage(story: FeedStory): string {
-  return getHeroImage(story.headline + story.section).url;
+  return getHeroImageForStory(story).url;
 }
 
 function canonicalizeSourceUrl(raw: string): string {

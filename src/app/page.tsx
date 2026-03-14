@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { zipValidSourceLinks } from "@/lib/sourceUrl";
-import { getHeroImage } from "@/lib/heroImages";
+import { getHeroImageForStory } from "@/lib/heroImages";
 
 interface FeedStory {
   id: string;
@@ -80,16 +79,11 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
 const SCROLL_THRESHOLD_RATIO = 0.15;
 
 export default function Home() {
-  const router = useRouter();
   const [stories, setStories] = useState<FeedStory[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [showGate, setShowGate] = useState(false);
-  const [showSignIn, setShowSignIn] = useState(false);
-  const [email, setEmail] = useState("");
-  const [signInError, setSignInError] = useState("");
-  const [signingIn, setSigningIn] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoGenAttempted = useRef(false);
   const dismissedByUserRef = useRef(false);
@@ -142,6 +136,8 @@ export default function Home() {
     const el = containerRef.current;
     if (!el) return;
     const onScroll = () => {
+      // Don't show gate while content is still loading — let user see content first
+      if (loading || generating) return;
       const { scrollTop, scrollHeight, clientHeight } = el;
       const scrollable = scrollHeight - clientHeight;
       if (scrollable <= 0) return;
@@ -155,24 +151,7 @@ export default function Home() {
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, [loading, stories.length]);
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.includes("@")) return;
-    setSignInError("");
-    setSigningIn(true);
-    try {
-      const res = await fetch("/api/profiles/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setSignInError(data.error || "Sign in failed"); setSigningIn(false); return; }
-      router.push("/feed");
-    } catch (err) { setSignInError(String(err)); setSigningIn(false); }
-  };
+  }, [loading, generating, stories.length]);
 
   const [heroOffset, setHeroOffset] = useState(0);
   useEffect(() => {
@@ -199,9 +178,9 @@ export default function Home() {
           {hasProfile === true ? (
             <Link href="/feed" className="btn btn-ghost btn-md" style={{ color: "var(--color-fg-muted)" }}>Log in</Link>
           ) : (
-            <button type="button" onClick={() => { setShowGate(true); setShowSignIn(true); }} className="btn btn-ghost btn-md" style={{ color: "var(--color-fg-muted)" }}>
+            <Link href="/login" className="btn btn-ghost btn-md" style={{ color: "var(--color-fg-muted)" }}>
               Log in
-            </button>
+            </Link>
           )}
           <Link href="/signup" className="btn btn-primary btn-md">Get started</Link>
         </div>
@@ -261,9 +240,9 @@ export default function Home() {
                   Log in
                 </Link>
               ) : (
-                <button type="button" onClick={() => { setShowGate(true); setShowSignIn(true); }} className="btn btn-ghost btn-md">
+                <Link href="/login" className="btn btn-ghost btn-md">
                   Log in
-                </button>
+                </Link>
               )}
             </div>
           </div>
@@ -429,19 +408,9 @@ export default function Home() {
               <Link href="/signup" className="btn btn-primary btn-md" style={{ width: "100%", textAlign: "center" }} onClick={dismissGate}>
                 Get started
               </Link>
-              {!showSignIn ? (
-                <button type="button" onClick={() => setShowSignIn(true)} className="btn btn-ghost btn-sm" style={{ color: "var(--color-fg-muted)", textDecoration: "underline" }}>
-                  Already have an account? Log in
-                </button>
-              ) : (
-                <form onSubmit={handleSignIn} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" style={{ flex: 1 }} />
-                    <button type="submit" disabled={signingIn || !email.includes("@")} className="btn btn-secondary btn-sm">{signingIn ? "\u2026" : "Log in"}</button>
-                  </div>
-                  {signInError && <p style={{ fontSize: "var(--text-xs)", color: "var(--color-danger)", margin: 0 }}>{signInError}</p>}
-                </form>
-              )}
+              <Link href="/login" className="btn btn-ghost btn-sm" style={{ color: "var(--color-fg-muted)", textAlign: "center", textDecoration: "underline" }} onClick={dismissGate}>
+                Already have an account? Log in
+              </Link>
               <button type="button" onClick={dismissGate} className="btn btn-ghost btn-sm" style={{ color: "var(--color-fg-muted)" }}>
                 Maybe later
               </button>
@@ -591,9 +560,9 @@ function SourceTicker() {
   );
 }
 
-/* ─── Story image with real Unsplash photos ─── */
+/* ─── Story image: section-relevant Unsplash photos ─── */
 function StoryImage({ story, size = "medium" }: { story: FeedStory; size?: "lead" | "medium" }) {
-  const heroImage = getHeroImage(story.headline + story.section);
+  const heroImage = getHeroImageForStory(story);
   const base = sectionColor(story.section);
   const height = size === "lead" ? 200 : 140;
   const [imgError, setImgError] = useState(false);

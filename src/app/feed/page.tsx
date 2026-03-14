@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { THERAPEUTIC_AREAS } from "@/lib/therapeuticAreas";
 import { REGION_OPTIONS, PRODUCT_CODE_OPTIONS } from "@/lib/feedFilters";
 import Header from "@/components/Header";
-import { getHeroImage } from "@/lib/heroImages";
+import { getHeroImageForStory } from "@/lib/heroImages";
 
 interface FeedStory {
   id: string;
@@ -142,9 +142,9 @@ function storyIcon(_section: string): string {
   return "•";
 }
 
-/** Hero image for news cards: uses curated Unsplash images with a gradient overlay fallback. */
+/** Hero image for news cards: section-relevant Unsplash images with gradient overlay. */
 function StoryImage({ story, size = "medium" }: { story: FeedStory; size?: "lead" | "medium" }) {
-  const heroImage = getHeroImage(story.headline + story.section);
+  const heroImage = getHeroImageForStory(story);
   const base = sectionColor(story.section);
   const height = size === "lead" ? 200 : 140;
   const [imgError, setImgError] = useState(false);
