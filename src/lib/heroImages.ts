@@ -22,34 +22,38 @@ export interface StoryImageContext {
 
 /** Base path for illustration assets (SVG, cartoon-style). */
 const ILLUSTRATION_BASE = "/illustrations";
+/** Cache-bust when changing illustrations. Bump to invalidate cached images. */
+const ILLUSTRATION_VERSION = "2";
+
+const img = (path: string) => `${ILLUSTRATION_BASE}/${path}?v=${ILLUSTRATION_VERSION}`;
 
 const HERO_IMAGES: HeroImage[] = [
-  { url: `${ILLUSTRATION_BASE}/laboratory.svg`, alt: "Laboratory research with glassware", category: "laboratory" },
-  { url: `${ILLUSTRATION_BASE}/microscopy.svg`, alt: "Microscope lens in a research laboratory", category: "microscopy" },
-  { url: `${ILLUSTRATION_BASE}/medical-devices.svg`, alt: "Medical devices and diagnostic equipment", category: "medical-devices" },
-  { url: `${ILLUSTRATION_BASE}/pharmaceutical.svg`, alt: "Pharmaceutical pills and production", category: "pharmaceutical" },
-  { url: `${ILLUSTRATION_BASE}/lab-work.svg`, alt: "Scientist performing laboratory work", category: "lab-work" },
-  { url: `${ILLUSTRATION_BASE}/data-analytics.svg`, alt: "Data visualization and analytics", category: "data-analytics" },
-  { url: `${ILLUSTRATION_BASE}/biotech.svg`, alt: "Molecular biology and biotech research", category: "biotech" },
-  { url: `${ILLUSTRATION_BASE}/healthcare.svg`, alt: "Healthcare professional in clinical setting", category: "healthcare" },
-  { url: `${ILLUSTRATION_BASE}/compliance.svg`, alt: "Regulatory documents and compliance", category: "compliance" },
-  { url: `${ILLUSTRATION_BASE}/surgery.svg`, alt: "Hospital surgery and medical equipment", category: "surgery" },
-  { url: `${ILLUSTRATION_BASE}/genomics.svg`, alt: "DNA and genomics research", category: "genomics" },
-  { url: `${ILLUSTRATION_BASE}/manufacturing.svg`, alt: "Pharmaceutical manufacturing", category: "manufacturing" },
-  { url: `${ILLUSTRATION_BASE}/ai-analytics.svg`, alt: "AI and analytics dashboard", category: "ai-analytics" },
-  { url: `${ILLUSTRATION_BASE}/supply-chain.svg`, alt: "Supply chain and logistics", category: "supply-chain" },
-  { url: `${ILLUSTRATION_BASE}/regulatory.svg`, alt: "Regulatory and policy", category: "regulatory" },
-  { url: `${ILLUSTRATION_BASE}/clinical-trials.svg`, alt: "Clinical trial research", category: "clinical-trials" },
-  { url: `${ILLUSTRATION_BASE}/vaccines.svg`, alt: "Vaccine and immunization research", category: "vaccines" },
-  { url: `${ILLUSTRATION_BASE}/corporate.svg`, alt: "Business and corporate", category: "corporate" },
-  { url: `${ILLUSTRATION_BASE}/chemistry.svg`, alt: "Chemical analysis and research", category: "chemistry" },
-  { url: `${ILLUSTRATION_BASE}/hospital.svg`, alt: "Hospital and medical facility", category: "hospital" },
-  { url: `${ILLUSTRATION_BASE}/medical-devices.svg`, alt: "Medical equipment and quality control", category: "medical-devices" },
-  { url: `${ILLUSTRATION_BASE}/data-analytics.svg`, alt: "Analytics and business intelligence", category: "data-analytics" },
-  { url: `${ILLUSTRATION_BASE}/corporate.svg`, alt: "Professional collaboration", category: "corporate" },
-  { url: `${ILLUSTRATION_BASE}/laboratory.svg`, alt: "Research and development lab", category: "laboratory" },
-  { url: `${ILLUSTRATION_BASE}/clinical-trials.svg`, alt: "Clinical research and medical science", category: "clinical-trials" },
-  { url: `${ILLUSTRATION_BASE}/compliance.svg`, alt: "Business documents and analysis", category: "compliance" },
+  { url: img("laboratory.svg"), alt: "Laboratory research with glassware", category: "laboratory" },
+  { url: img("microscopy.svg"), alt: "Microscope lens in a research laboratory", category: "microscopy" },
+  { url: img("medical-devices.svg"), alt: "Medical devices and diagnostic equipment", category: "medical-devices" },
+  { url: img("pharmaceutical.svg"), alt: "Pharmaceutical pills and production", category: "pharmaceutical" },
+  { url: img("lab-work.svg"), alt: "Scientist performing laboratory work", category: "lab-work" },
+  { url: img("data-analytics.svg"), alt: "Data visualization and analytics", category: "data-analytics" },
+  { url: img("biotech.svg"), alt: "Molecular biology and biotech research", category: "biotech" },
+  { url: img("healthcare.svg"), alt: "Healthcare professional in clinical setting", category: "healthcare" },
+  { url: img("compliance.svg"), alt: "Regulatory documents and compliance", category: "compliance" },
+  { url: img("surgery.svg"), alt: "Hospital surgery and medical equipment", category: "surgery" },
+  { url: img("genomics.svg"), alt: "DNA and genomics research", category: "genomics" },
+  { url: img("manufacturing.svg"), alt: "Pharmaceutical manufacturing", category: "manufacturing" },
+  { url: img("ai-analytics.svg"), alt: "AI and analytics dashboard", category: "ai-analytics" },
+  { url: img("supply-chain.svg"), alt: "Supply chain and logistics", category: "supply-chain" },
+  { url: img("regulatory.svg"), alt: "Regulatory and policy", category: "regulatory" },
+  { url: img("clinical-trials.svg"), alt: "Clinical trial research", category: "clinical-trials" },
+  { url: img("vaccines.svg"), alt: "Vaccine and immunization research", category: "vaccines" },
+  { url: img("corporate.svg"), alt: "Business and corporate", category: "corporate" },
+  { url: img("chemistry.svg"), alt: "Chemical analysis and research", category: "chemistry" },
+  { url: img("hospital.svg"), alt: "Hospital and medical facility", category: "hospital" },
+  { url: img("medical-devices.svg"), alt: "Medical equipment and quality control", category: "medical-devices" },
+  { url: img("data-analytics.svg"), alt: "Analytics and business intelligence", category: "data-analytics" },
+  { url: img("corporate.svg"), alt: "Professional collaboration", category: "corporate" },
+  { url: img("laboratory.svg"), alt: "Research and development lab", category: "laboratory" },
+  { url: img("clinical-trials.svg"), alt: "Clinical research and medical science", category: "clinical-trials" },
+  { url: img("compliance.svg"), alt: "Business documents and analysis", category: "compliance" },
 ];
 
 export default HERO_IMAGES;
@@ -125,7 +129,7 @@ export function getHeroImageUrlForStory(story: StoryImageContext): string {
 /**
  * Landing page hero — regulatory illustration for the platform banner.
  */
-export const LANDING_HERO_IMAGE = `${ILLUSTRATION_BASE}/regulatory.svg`;
+export const LANDING_HERO_IMAGE = img("regulatory.svg");
 
 /**
  * Deterministically pick a hero image from a string seed.

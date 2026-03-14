@@ -76,7 +76,8 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
   return ordered;
 }
 
-const SCROLL_THRESHOLD_PX = 900; // ~1 viewport; gate shows after scrolling this far
+const SCROLL_THRESHOLD_PX = 900; // desktop: ~1 viewport
+const MOBILE_SCROLL_MULTIPLIER = 1.6; // mobile: gate at mid-page (~1.6 viewports)
 
 export default function Home() {
   const [stories, setStories] = useState<FeedStory[]>([]);
@@ -139,7 +140,10 @@ export default function Home() {
       // Don't show gate while content is still loading — let user see content first
       if (loading || generating) return;
       const { scrollTop } = el;
-      const threshold = typeof window !== "undefined" ? Math.min(window.innerHeight, SCROLL_THRESHOLD_PX) : SCROLL_THRESHOLD_PX;
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+      const threshold = typeof window !== "undefined"
+        ? (isMobile ? window.innerHeight * MOBILE_SCROLL_MULTIPLIER : Math.min(window.innerHeight, SCROLL_THRESHOLD_PX))
+        : SCROLL_THRESHOLD_PX;
       if (scrollTop >= threshold) {
         if (!dismissedByUserRef.current) setShowGate(true);
       } else {
@@ -165,7 +169,7 @@ export default function Home() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)" }}>
       {/* ── Header ── */}
-      <header className="topbar" style={{ position: "sticky", top: 0, zIndex: 50 }}>
+      <header className="topbar home-topbar" style={{ position: "sticky", top: 0, zIndex: 50 }}>
         <Link href="/" className="topbar-brand" style={{ textDecoration: "none" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand-mark.png" alt="" aria-hidden="true" width={32} height={32} style={{ flexShrink: 0, objectFit: "contain" }} />
@@ -187,6 +191,7 @@ export default function Home() {
       {/* ── Scrollable content ── */}
       <div
         ref={containerRef}
+        className="home-scroll"
         style={{
           height: "calc(100vh - var(--topbar-height, 56px))",
           overflowY: showGate ? "hidden" : "auto",
@@ -194,7 +199,7 @@ export default function Home() {
         }}
       >
         {/* ── Hero ── */}
-        <div style={{
+        <div className="home-hero" style={{
           position: "relative",
           minHeight: "calc(82vh - var(--topbar-height, 56px))",
           display: "flex",
@@ -206,10 +211,10 @@ export default function Home() {
           overflow: "hidden",
         }}>
           {/* Hero content with parallax */}
-          <div style={{ transform: `translateY(${heroOffset}px)`, transition: "transform 0.05s linear", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+          <div className="home-hero-inner" style={{ transform: `translateY(${heroOffset}px)`, transition: "transform 0.05s linear", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
 
             {/* Main headline */}
-            <h1 style={{
+            <h1 className="home-hero-title" style={{
               fontSize: "clamp(3rem, 5.5vw, 5.5rem)",
               fontWeight: "var(--weight-bold)",
               fontFamily: "var(--font-heading)",
@@ -229,7 +234,7 @@ export default function Home() {
             <SourceTicker />
 
             {/* CTAs — more breathing room below ticker */}
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", marginTop: "var(--space-8)" }}>
+            <div className="home-cta-row" style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", marginTop: "var(--space-8)" }}>
               <Link href="/signup" className="btn btn-primary btn-md">
                 Get started
               </Link>
@@ -248,7 +253,7 @@ export default function Home() {
         </div>
 
         {/* ── Feed ── */}
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 var(--space-6) var(--space-12)", position: "relative" }}>
+        <div className="home-feed" style={{ maxWidth: 960, margin: "0 auto", padding: "0 var(--space-6) var(--space-12)", position: "relative" }}>
           {/* Hard fade-out after ~1 card — gate covers the rest */}
           <div style={{
             position: "absolute",
@@ -422,6 +427,35 @@ export default function Home() {
         @keyframes blink { 0%, 100% { opacity: 0.6; } 50% { opacity: 0; } }
         @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         .card-interactive:hover { box-shadow: var(--shadow-md); }
+
+        /* Mobile: gate at mid-page, hero scaled down, spacing fixed */
+        @media (max-width: 767px) {
+          .home-topbar { padding-bottom: var(--space-3); border-bottom: 1px solid var(--color-border); }
+          .home-scroll { padding-top: var(--space-2); }
+          .home-hero {
+            min-height: auto !important;
+            padding: var(--space-12) var(--space-4) var(--space-16) !important;
+            padding-top: var(--space-10) !important;
+            margin-top: var(--space-4);
+          }
+          .home-hero-inner { gap: var(--space-4); }
+          .home-hero-title {
+            font-size: clamp(1.5rem, 6vw, 2rem) !important;
+            line-height: 1.2 !important;
+            margin-bottom: var(--space-6) !important;
+          }
+          .home-hero .home-typewriter-input {
+            padding: 12px 16px !important;
+            max-width: 100%;
+          }
+          .home-hero .home-typewriter-input span { font-size: var(--text-sm) !important; }
+          .home-hero .home-source-ticker { margin-top: var(--space-2) !important; max-width: 100%; }
+          .home-hero .home-cta-row { margin-top: var(--space-6) !important; gap: var(--space-3) !important; flex-wrap: wrap; justify-content: center; }
+          .home-feed {
+            padding: var(--space-8) var(--space-4) var(--space-12) !important;
+          }
+          .home-feed > div:first-of-type { top: 180; }
+        }
       `}</style>
     </div>
   );
@@ -470,7 +504,7 @@ function TypewriterInput() {
   }, [charIdx, deleting, queryIdx]);
 
   return (
-    <div style={{
+    <div className="home-typewriter-input" style={{
       maxWidth: 720, width: "100%",
       background: "var(--color-surface-raised)", border: "1px solid var(--color-border)",
       borderRadius: "var(--radius-xl)", padding: "16px 24px",
@@ -526,7 +560,7 @@ const TICKER_ITEMS = [
 function SourceTicker() {
   const doubled = [...TICKER_ITEMS, ...TICKER_ITEMS];
   return (
-    <div style={{
+    <div className="home-source-ticker" style={{
       maxWidth: 720, width: "100%",
       overflow: "hidden",
       position: "relative",
