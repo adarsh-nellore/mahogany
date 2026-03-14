@@ -27,8 +27,7 @@ export async function POST(request: NextRequest) {
       domains?: string[];
     };
     const authUser = await getAuthUser(request);
-    let profileId: string | null = authUser?.id ?? null;
-    if (!profileId && body?.profile_id) profileId = body.profile_id;
+    const profileId: string | null = body?.profile_id ?? authUser?.id ?? null;
     if (!profileId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
