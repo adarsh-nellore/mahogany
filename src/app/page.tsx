@@ -89,12 +89,6 @@ export default function Home() {
   const autoGenAttempted = useRef(false);
   const dismissedByUserRef = useRef(false);
 
-  // On mobile: gate is the whole first page — show it immediately
-  useEffect(() => {
-    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-    if (isMobile) setShowGate(true);
-  }, []);
-
   const openGate = useCallback(() => {
     dismissedByUserRef.current = false;
     setShowGate(true);
@@ -391,7 +385,6 @@ export default function Home() {
       {/* ── Gate overlay ── */}
       {showGate && (
         <div
-          className="home-gate-overlay"
           style={{
             position: "fixed", inset: 0, zIndex: 100,
             background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
@@ -401,7 +394,6 @@ export default function Home() {
           onClick={dismissGate}
         >
           <div
-            className="home-gate-card"
             style={{
               background: "var(--color-surface)", borderRadius: "var(--radius-xl)",
               padding: "var(--space-8)", maxWidth: 400, width: "100%",
@@ -463,21 +455,6 @@ export default function Home() {
             padding: var(--space-8) var(--space-4) var(--space-12) !important;
           }
           .home-feed > div:first-of-type { top: 180; }
-          /* Gate = full first page on mobile */
-          .home-gate-overlay {
-            top: var(--topbar-height, 56px) !important;
-            align-items: stretch !important;
-            padding: 0 !important;
-          }
-          .home-gate-card {
-            max-width: none !important;
-            border-radius: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            padding: var(--space-10) var(--space-6) !important;
-            flex: 1;
-          }
         }
       `}</style>
     </div>
