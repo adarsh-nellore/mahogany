@@ -61,7 +61,7 @@ function isDigestDayForCadence(localDayOfWeek: number, cadence: string): boolean
 
 export const maxDuration = 600; // 10 min — digest sends can take 4+ min with LLM header per profile
 
-async function sendDigests(): Promise<DigestSendSummary> {
+async function sendDigests(force = false): Promise<DigestSendSummary> {
   const summary: DigestSendSummary = {
     total_sent: 0,
     profiles: [],
@@ -77,26 +77,31 @@ async function sendDigests(): Promise<DigestSendSummary> {
     }
 
     const candidates = await query<Profile>(
-      `SELECT * FROM profiles
-       WHERE (
-         last_digest_at IS NULL
-         OR (digest_cadence = 'daily'        AND last_digest_at < now() - interval '1 hour')
-         OR (digest_cadence = 'twice_weekly'  AND last_digest_at < now() - interval '3 days')
-         OR (digest_cadence = 'weekly'        AND last_digest_at < now() - interval '6 days')
-       )`
+      force
+        ? `SELECT * FROM profiles`
+        : `SELECT * FROM profiles
+           WHERE (
+             last_digest_at IS NULL
+             OR (digest_cadence = 'daily'        AND last_digest_at < now() - interval '1 hour')
+             OR (digest_cadence = 'twice_weekly'  AND last_digest_at < now() - interval '3 days')
+             OR (digest_cadence = 'weekly'        AND last_digest_at < now() - interval '6 days')
+           )`
     );
 
-    const profiles = candidates.filter((p) => {
-      const tz = p.timezone || "UTC";
-      const localHour = getLocalHour(tz);
-      const localDay = getLocalDayOfWeek(tz);
-      const digestHour = p.digest_send_hour ?? 7;
-      return (
-        isInDigestHourWindow(localHour, digestHour) &&
-        isDigestDayForCadence(localDay, p.digest_cadence || "daily")
-      );
-    });
+    const profiles = force
+      ? candidates
+      : candidates.filter((p) => {
+          const tz = p.timezone || "UTC";
+          const localHour = getLocalHour(tz);
+          const localDay = getLocalDayOfWeek(tz);
+          const digestHour = p.digest_send_hour ?? 7;
+          return (
+            isInDigestHourWindow(localHour, digestHour) &&
+            isDigestDayForCadence(localDay, p.digest_cadence || "daily")
+          );
+        });
 
+    if (force) console.log(`[send-digests] force=1 — bypassing hour/day window`);
     console.log(`[send-digests] ${profiles.length} profile(s) in digest hour window (of ${candidates.length} cadence-eligible)`);
 
     if (profiles.length === 0) {
@@ -225,8 +230,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: String(e) }, { status: 500 });
     }
   }
+  const force = url.searchParams.get("force") === "1";
   try {
-    const summary = await sendDigests();
+    const summary = await sendDigests(force);
     return NextResponse.json(summary);
   } catch (err) {
     return NextResponse.json({ error: "Digest send failed", details: String(err) }, { status: 500 });
