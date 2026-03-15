@@ -44,7 +44,7 @@ export function renderDigestEmail(markdown: string): string {
 
   if (summaryLines.length > 0) {
     htmlParts.push(
-      `<p style="${font(16)}color:#374151;margin:0 0 36px 0;line-height:1.8;">${formatInline(summaryLines.join(" "))}</p>`
+      `<p style="${serifFont(16)}color:#374151;margin:0 0 36px 0;line-height:1.85;">${formatInline(summaryLines.join(" "))}</p>`
     );
   }
 
@@ -66,8 +66,8 @@ export function renderDigestEmail(markdown: string): string {
 
       htmlParts.push(
         `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:48px 0 20px 0;">
-          <tr><td style="padding:16px 0 12px 0;border-bottom:2px solid ${accentColor};">
-            <span style="${font(13)}font-weight:700;color:${accentColor};letter-spacing:0.5px;text-transform:uppercase;">${esc(title)}</span>
+          <tr><td style="padding:14px 0 12px 0;border-bottom:2px solid ${accentColor};">
+            <span style="${serifFont(12)}font-weight:700;color:${accentColor};letter-spacing:0.8px;text-transform:uppercase;">${esc(title)}</span>
           </td></tr>
         </table>`
       );
@@ -77,7 +77,7 @@ export function renderDigestEmail(markdown: string): string {
 
     if (trimmed.startsWith("**")) {
       htmlParts.push(
-        `<p style="${font(16)}font-weight:600;color:#111827;margin:20px 0 6px 0;line-height:1.5;">${formatInline(trimmed)}</p>`
+        `<p style="${serifFont(17)}font-weight:700;color:#111827;margin:20px 0 6px 0;line-height:1.4;">${formatInline(trimmed)}</p>`
       );
       i++;
       continue;
@@ -101,7 +101,7 @@ export function renderDigestEmail(markdown: string): string {
     }
 
     htmlParts.push(
-      `<p style="${font(15)}color:#374151;margin:12px 0;line-height:1.75;">${formatInline(trimmed)}</p>`
+      `<p style="${serifFont(15)}color:#374151;margin:12px 0;line-height:1.8;">${formatInline(trimmed)}</p>`
     );
     i++;
   }
@@ -122,20 +122,38 @@ export function renderDigestEmail(markdown: string): string {
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>${esc(title || "Regulatory Intelligence Digest")}</title>
 </head>
-<body style="margin:0;padding:0;background:#f9fafb;-webkit-font-smoothing:antialiased;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f9fafb;">
+<body style="margin:0;padding:0;background:#f4f1ee;-webkit-font-smoothing:antialiased;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f4f1ee;">
 <tr><td align="center" style="padding:32px 16px;">
 
-<table width="640" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px;width:100%;background:#ffffff;overflow:hidden;">
+<table width="640" cellpadding="0" cellspacing="0" role="presentation" style="max-width:640px;width:100%;background:#ffffff;overflow:hidden;border-radius:4px;">
+
+<!-- Brand Header -->
+<tr><td style="padding:20px 40px;background:#1a0f0a;">
+  <table cellpadding="0" cellspacing="0" role="presentation">
+    <tr>
+      <td style="padding-right:10px;vertical-align:middle;">
+        <table cellpadding="0" cellspacing="0" role="presentation">
+          <tr><td style="width:30px;height:30px;background:#9E3B1E;border-radius:3px;text-align:center;vertical-align:middle;">
+            <span style="${serifFont(17)}font-weight:700;color:#ffffff;line-height:30px;display:block;">M</span>
+          </td></tr>
+        </table>
+      </td>
+      <td style="vertical-align:middle;">
+        <span style="${serifFont(18)}font-weight:700;color:#f5f0eb;letter-spacing:0.2px;">Mahogany</span>
+      </td>
+    </tr>
+  </table>
+</td></tr>
 
 <!-- Masthead -->
-<tr><td style="padding:40px 40px 0 40px;">
-  <p style="margin:0 0 4px 0;font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:700;color:#111827;letter-spacing:-0.5px;line-height:1.3;">${esc(title || "Regulatory Intelligence Digest")}</p>
+<tr><td style="padding:36px 40px 0 40px;border-left:4px solid #9E3B1E;">
+  <p style="margin:0 0 6px 0;${serifFont(27)}font-weight:700;color:#111827;letter-spacing:-0.5px;line-height:1.3;">${esc(title || "Regulatory Intelligence Digest")}</p>
   <p style="${font(13)}color:#6b7280;margin:0;">${esc(dateStr)}</p>
 </td></tr>
 
 <!-- Divider -->
-<tr><td style="padding:16px 40px 0 40px;">
+<tr><td style="padding:20px 40px 0 40px;">
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:0;">
 </td></tr>
 
@@ -145,14 +163,15 @@ ${bodyHtml}
 </td></tr>
 
 <!-- Footer -->
-<tr><td style="padding:24px 40px;border-top:1px solid #e5e7eb;">
-  <p style="${font(13)}color:#6b7280;margin:0 0 8px 0;line-height:1.5;">
-    Powered by <a href="${appUrl}" style="color:#9E3B1E;text-decoration:none;font-weight:600;">Mahogany</a>
+<tr><td style="padding:20px 40px;background:#1a0f0a;border-radius:0 0 4px 4px;">
+  <p style="${serifFont(14)}color:#c4a882;margin:0 0 10px 0;font-weight:600;">
+    <a href="${appUrl}" style="color:#c4a882;text-decoration:none;">Mahogany</a>
+    <span style="${font(12)}color:#7a6a5a;font-weight:400;"> &nbsp;·&nbsp; Regulatory Intelligence</span>
   </p>
-  <p style="${font(12)}color:#9ca3af;margin:0;line-height:1.5;">
-    <a href="${appUrl}/feed" style="color:#6b7280;text-decoration:underline;">View full feed</a> &nbsp;·&nbsp;
-    <a href="${appUrl}/digest" style="color:#6b7280;text-decoration:underline;">Update preferences</a> &nbsp;·&nbsp;
-    <a href="${appUrl}/unsubscribe" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+  <p style="${font(12)}color:#7a6a5a;margin:0;line-height:1.7;">
+    <a href="${appUrl}/feed" style="color:#9a8a7a;text-decoration:underline;">View full feed</a> &nbsp;·&nbsp;
+    <a href="${appUrl}/digest" style="color:#9a8a7a;text-decoration:underline;">Update preferences</a> &nbsp;·&nbsp;
+    <a href="${appUrl}/unsubscribe" style="color:#9a8a7a;text-decoration:underline;">Unsubscribe</a>
   </p>
 </td></tr>
 
@@ -163,8 +182,13 @@ ${bodyHtml}
 </html>`;
 }
 
+/** Serif — used for headings, title, section labels */
+function serifFont(size: number): string {
+  return `font-family:Georgia,'Times New Roman',Times,serif;font-size:${size}px;`;
+}
+/** Sans-serif — used for meta, footnotes, source lines */
 function font(size: number): string {
-  return `font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Helvetica,sans-serif;font-size:${size}px;`;
+  return `font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:${size}px;`;
 }
 
 function isSectionHeader(line: string): boolean {
