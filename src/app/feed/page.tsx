@@ -904,34 +904,35 @@ export default function FeedPage() {
               const lead = sectionStories[0];
               return (
                 <div key={section} id={slugify(section)} data-section={section}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-8)" }}>
-                    <div style={{ width: 4, height: 20, borderRadius: "var(--radius-full)", background: sectionColor(section) }} />
-                    <h2 style={{
-                      fontSize: "var(--text-md)", fontWeight: 700, fontFamily: "var(--font-sans)",
-                      letterSpacing: "var(--tracking-wider)", textTransform: "uppercase",
-                      color: sectionColor(section), margin: 0,
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-5)" }}>
+                    <span style={{
+                      fontSize: "var(--text-2xs)", fontWeight: 700, fontFamily: "var(--font-sans)",
+                      letterSpacing: "0.06em", textTransform: "uppercase",
+                      padding: "3px 10px", borderRadius: "var(--radius-full)",
+                      background: `${sectionColor(section)}18`,
+                      color: sectionColor(section),
+                      border: `1px solid ${sectionColor(section)}40`,
                     }}>
                       {section}
-                    </h2>
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
+                    </span>
+                    <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
                       {sectionStories.length}
                     </span>
                   </div>
-                  <div className="news-section-articles" style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+                  <div className="news-section-articles" style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
                     {lead && (
                       <Link href={`/stories/${lead.id}`} style={{ textDecoration: "none", color: "inherit" }}>
                         <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(lead.severity), cursor: "pointer", padding: "var(--space-6)", borderBottom: "1px solid var(--color-border)" } as React.CSSProperties}>
                           <h2 className="news-card-title" style={{ fontSize: "var(--text-lg)", marginBottom: "var(--space-2)", lineHeight: 1.25 }}>
                             {lead.headline}
                           </h2>
-                          <p className="news-card-summary" style={{ marginBottom: "var(--space-3)", fontSize: "var(--text-base)" }}>{truncate(lead.summary, 200)}</p>
+                          <p className="news-card-summary" style={{ marginBottom: "var(--space-3)", fontSize: "var(--text-base)" }}>{truncate(lead.summary, 320)}</p>
                           <ProfileMatchTags story={lead} profile={profile} extraProducts={watchedProducts} />
                           <RelevanceReason reason={lead.relevance_reason} />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-2)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-3)" }}>
                             <div className="news-card-meta" style={{ margin: 0 }}>
                               <FreshnessBadge createdAt={lead.created_at} publishedAt={lead.published_at} />
-                              <span className={`badge ${lead.severity === "high" ? "badge-danger" : lead.severity === "medium" ? "badge-warning" : "badge-info"}`} style={{ fontSize: "var(--text-2xs)" }}>{lead.severity}</span>
-                              <TrustIndicator sourceCount={lead.source_urls.length} severity={lead.severity} />
+                              <TrustIndicator sourceCount={lead.source_urls.length} severity={lead.severity} sourceLabels={lead.source_labels} sourceUrls={lead.source_urls} />
                             </div>
                             <FeedbackButtons storyId={lead.id} />
                           </div>
@@ -941,16 +942,15 @@ export default function FeedPage() {
                     {sectionStories.slice(1).map((s) => (
                       <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
                         <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(s.severity), cursor: "pointer", padding: "var(--space-5) var(--space-6)", borderBottom: "1px solid var(--color-border)" } as React.CSSProperties}>
-                          <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: "var(--space-1)" }}>
+                          <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: "var(--space-2)" }}>
                             {s.headline}
                           </h3>
-                          <p className="news-card-summary" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-2)" }}>{truncate(s.summary || s.body, 120)}</p>
+                          <p className="news-card-summary" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-3)" }}>{truncate(s.summary || s.body, 220)}</p>
                           <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-1)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-2)" }}>
                             <div className="news-card-meta" style={{ margin: 0 }}>
                               <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
-                              <span className={`badge ${s.severity === "high" ? "badge-danger" : s.severity === "medium" ? "badge-warning" : "badge-info"}`} style={{ fontSize: "var(--text-2xs)" }}>{s.severity}</span>
-                              <TrustIndicator sourceCount={s.source_urls.length} severity={s.severity} />
+                              <TrustIndicator sourceCount={s.source_urls.length} severity={s.severity} sourceLabels={s.source_labels} sourceUrls={s.source_urls} />
                             </div>
                             <FeedbackButtons storyId={s.id} />
                           </div>
@@ -1137,19 +1137,56 @@ function FeedbackButtons({ storyId }: { storyId: string }) {
 }
 
 /* ─── Trust indicator ─── */
-function TrustIndicator({ sourceCount, severity }: { sourceCount: number; severity: string }) {
-  const severityLabel = severity === "high" ? "High" : severity === "medium" ? "Med" : "Low";
+function TrustIndicator({ sourceCount, severity, sourceLabels, sourceUrls }: { sourceCount: number; severity: string; sourceLabels?: string[]; sourceUrls?: string[] }) {
   const severityClass = severity === "high" ? "badge-danger" : severity === "medium" ? "badge-warning" : "badge-info";
+  // Dedupe labels, take first 2
+  const seen = new Set<string>();
+  const displaySources: { label: string; url?: string }[] = [];
+  for (let i = 0; i < (sourceLabels?.length ?? 0) && displaySources.length < 2; i++) {
+    const label = sourceLabels![i];
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    displaySources.push({ label, url: sourceUrls?.[i] });
+  }
   return (
-    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-      {sourceCount > 0 && (
-        <span className="trust-badge">
-          {sourceCount} {sourceCount === 1 ? "source" : "sources"}
-        </span>
-      )}
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
       <span className={`badge ${severityClass}`} style={{ fontSize: "var(--text-2xs)", padding: "1px 6px" }}>
-        {severityLabel}
+        {severity}
       </span>
+      {displaySources.length > 0 ? (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {displaySources.map((src, i) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+              {i > 0 && <span style={{ color: "var(--color-border-strong)", fontSize: 10 }}>·</span>}
+              {src.url ? (
+                <a
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ fontSize: "var(--text-2xs)", color: "var(--color-primary)", fontFamily: "var(--font-sans)", fontWeight: 500, textDecoration: "none", whiteSpace: "nowrap" }}
+                >
+                  {src.label.length > 28 ? src.label.slice(0, 28) + "…" : src.label}
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 2, verticalAlign: "middle", opacity: 0.6 }}>
+                    <path d="M7 17 17 7" /><path d="M7 7h10v10" />
+                  </svg>
+                </a>
+              ) : (
+                <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-secondary)", fontFamily: "var(--font-sans)", fontWeight: 500, whiteSpace: "nowrap" }}>
+                  {src.label.length > 28 ? src.label.slice(0, 28) + "…" : src.label}
+                </span>
+              )}
+            </span>
+          ))}
+          {sourceCount > 2 && (
+            <span style={{ fontSize: "var(--text-2xs)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>
+              +{sourceCount - 2} more
+            </span>
+          )}
+        </span>
+      ) : sourceCount > 0 ? (
+        <span className="trust-badge">{sourceCount} {sourceCount === 1 ? "source" : "sources"}</span>
+      ) : null}
     </div>
   );
 }
