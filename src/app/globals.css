@@ -101,6 +101,7 @@
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
+  --space-7: 28px;
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
@@ -334,16 +335,15 @@ select.input {
   line-height: var(--leading-relaxed);
 }
 
-/* News / Story cards (Nightmarket — prominent left accent) */
+/* News / Story cards — editorial, borderless, accent-bar style */
 .news-card {
   --news-card-accent: var(--primary-600);
-  background: var(--surface-850);
-  border: var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   position: relative;
-  overflow: hidden;
-  transition: all var(--duration-normal) var(--ease-out);
+  overflow: visible;
+  transition: box-shadow var(--duration-normal) var(--ease-out);
 }
 .news-card::before {
   content: "";
@@ -356,10 +356,19 @@ select.input {
   background: var(--news-card-accent);
 }
 .news-card:hover {
-  border-color: rgba(255,255,255,0.12);
-  background: var(--surface-800);
-  transform: translateY(-2px);
   box-shadow: var(--shadow-card);
+}
+/* Separator between articles within a section (not on the first) */
+.news-section-articles > * + * article.news-card {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-7);
+}
+/* Bump line-height for headlines and summaries for readability */
+.news-card-title {
+  line-height: var(--leading-snug);
+}
+.news-card-summary {
+  line-height: var(--leading-relaxed);
 }
 .news-card-meta {
   display: flex;

@@ -142,6 +142,8 @@ function storyIcon(_section: string): string {
   return "•";
 }
 
+const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 /** Hero image for news cards: section-relevant Unsplash images with gradient overlay. */
 function StoryImage({ story, size = "medium" }: { story: FeedStory; size?: "lead" | "medium" }) {
   const heroImage = getHeroImageForStory(story);
@@ -331,6 +333,46 @@ export default function FeedPage() {
 
   useEffect(() => { fetchStories(); }, [fetchStories]);
 
+  // Fade-in scroll animation + active section tracking
+  useEffect(() => {
+    if (loading || stories.length === 0) return;
+
+    // Fade-in observer for articles
+    const fadeObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("article-visible");
+            fadeObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    setTimeout(() => {
+      document.querySelectorAll(".feed-article").forEach((el) => fadeObserver.observe(el));
+    }, 0);
+
+    // Section tracking observer for active pill highlight
+    const sectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const sectionName = entry.target.getAttribute("data-section");
+            if (sectionName) setActiveSectionInView(sectionName);
+          }
+        });
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -60% 0px" }
+    );
+    document.querySelectorAll("[data-section]").forEach((el) => sectionObserver.observe(el));
+
+    return () => {
+      fadeObserver.disconnect();
+      sectionObserver.disconnect();
+    };
+  }, [loading, stories.length]);
+
   const handleSemanticSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
       setSearchMode("idle");
@@ -492,6 +534,9 @@ export default function FeedPage() {
 
   // Snapshot view filter: "all" | "high" | section name
   const [snapshotView, setSnapshotView] = useState<"all" | "high" | string>("all");
+
+  // Active section in viewport (for pill highlight)
+  const [activeSectionInView, setActiveSectionInView] = useState<string | null>(null);
   const sectionCounts = (() => {
     const m = new Map<string, number>();
     for (const s of filteredStories) {
@@ -768,13 +813,15 @@ export default function FeedPage() {
                 </>
               )}
               {sectionCounts.map(([sec, n]) => (
-                <button key={sec} type="button" onClick={() => setSnapshotView(snapshotView === sec ? "all" : sec)} style={{
+                <button key={sec} type="button" onClick={() => {
+                  document.getElementById(slugify(sec))?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }} style={{
                   fontSize: "var(--text-2xs)", fontFamily: "var(--font-sans)", cursor: "pointer",
                   padding: "3px 10px", borderRadius: "var(--radius-full)",
-                  background: snapshotView === sec ? "var(--color-primary-subtle)" : "var(--surface-800)",
-                  color: snapshotView === sec ? "var(--color-primary)" : "var(--color-fg-muted)",
-                  border: snapshotView === sec ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
-                  fontWeight: snapshotView === sec ? 600 : 400,
+                  background: activeSectionInView === sec ? "var(--color-primary-subtle)" : "var(--surface-800)",
+                  color: activeSectionInView === sec ? "var(--color-primary)" : "var(--color-fg-muted)",
+                  border: activeSectionInView === sec ? "1px solid var(--color-primary-muted)" : "1px solid var(--color-border)",
+                  fontWeight: activeSectionInView === sec ? 600 : 400,
                 }}>
                   {sec} ({n})
                 </button>
@@ -852,14 +899,14 @@ export default function FeedPage() {
 
         {/* ── STORY FEED grouped by AI category ── */}
         {!loading && displayStories.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-12)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-20)" }}>
             {groupBySection(displayStories).map(({ section, stories: sectionStories }) => {
               const lead = sectionStories[0];
               const featured = sectionStories.slice(1, 3);
               const rest = sectionStories.slice(3);
               return (
-                <div key={section} id={`section-${section.replace(/\s+/g, "-").toLowerCase()}`}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
+                <div key={section} id={slugify(section)} data-section={section}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-8)" }}>
                     <div style={{ width: 4, height: 20, borderRadius: "var(--radius-full)", background: sectionColor(section) }} />
                     <h2 style={{
                       fontSize: "var(--text-md)", fontWeight: 700, fontFamily: "var(--font-sans)",
@@ -872,12 +919,12 @@ export default function FeedPage() {
                       {sectionStories.length}
                     </span>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+                  <div className="news-section-articles" style={{ display: "flex", flexDirection: "column", gap: "var(--space-10)" }}>
                     {lead && (
                       <Link href={`/stories/${lead.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <article className="news-card card-interactive" style={{ "--news-card-accent": severityAccentColor(lead.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
+                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(lead.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
                           <StoryImage story={lead} size="lead" />
-                          <div style={{ padding: "var(--space-5)" }}>
+                          <div style={{ padding: "var(--space-7)" }}>
                             <div className="news-card-meta">
                               <span style={{ color: sectionColor(lead.section), fontWeight: 600, textTransform: "uppercase" }}>{lead.section}</span>
                               <FreshnessBadge createdAt={lead.created_at} publishedAt={lead.published_at} />
@@ -899,9 +946,9 @@ export default function FeedPage() {
                     )}
                     {featured.map((s) => (
                       <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <article className="news-card card-interactive" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
+                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
                           <StoryImage story={s} size="medium" />
-                          <div style={{ padding: "var(--space-4)", display: "flex", flexDirection: "column" }}>
+                          <div style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column" }}>
                             <div className="news-card-meta">
                               <span style={{ color: sectionColor(s.section), fontWeight: 600, textTransform: "uppercase" }}>{s.section}</span>
                               <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
@@ -921,7 +968,7 @@ export default function FeedPage() {
                     ))}
                     {rest.map((s) => (
                       <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <article className="news-card card-interactive" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "row", cursor: "pointer", padding: "var(--space-4)", gap: "var(--space-4)", alignItems: "center" } as React.CSSProperties}>
+                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "row", cursor: "pointer", padding: "var(--space-6)", gap: "var(--space-4)", alignItems: "center" } as React.CSSProperties}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div className="news-card-meta" style={{ marginBottom: 4 }}>
                               <span style={{ color: sectionColor(s.section), fontWeight: 600, textTransform: "uppercase", fontSize: "var(--text-2xs)" }}>{s.section}</span>
@@ -960,6 +1007,15 @@ export default function FeedPage() {
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        .feed-article {
+          opacity: 0;
+          transform: translateY(16px);
+          transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        .feed-article.article-visible {
+          opacity: 1;
+          transform: translateY(0);
         }
         @media (max-width: 767px) {
           .feed-layout {

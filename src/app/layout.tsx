@@ -28,9 +28,13 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mahogany — Regulatory Intelligence",
+  title: "Stay Current on Regulatory in 5 Minutes | Mahogany",
   description:
     "Personalized regulatory intelligence for RA/RI professionals.",
+  icons: {
+    icon: "/brand-mark.png",
+    apple: "/brand-mark.png",
+  },
 };
 
 export default function RootLayout({

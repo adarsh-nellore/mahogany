@@ -79,6 +79,34 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
 const SCROLL_THRESHOLD_PX = 900; // desktop: ~1 viewport
 const MOBILE_SCROLL_MULTIPLIER = 1.6; // mobile: gate at mid-page (~1.6 viewports)
 
+function HowItWorksBox({ title, desc, snapshot }: { title: string; desc: string; snapshot: React.ReactNode }) {
+  return (
+    <div style={{
+      background: "var(--color-surface)",
+      border: "1px solid var(--color-border)",
+      borderRadius: "var(--radius-lg)",
+      padding: "var(--space-5)",
+      display: "flex",
+      flexDirection: "column",
+      gap: "var(--space-4)",
+    }}>
+      <div>
+        <div style={{ fontSize: "var(--text-md)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)", marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", lineHeight: "var(--leading-relaxed)" }}>{desc}</div>
+      </div>
+      <div style={{
+        minHeight: 56,
+        padding: "var(--space-3)",
+        background: "var(--color-surface-inset)",
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--color-border)",
+      }}>
+        {snapshot}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [stories, setStories] = useState<FeedStory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -224,13 +252,10 @@ export default function Home() {
               margin: "0 0 var(--space-10)",
               maxWidth: "88vw",
             }}>
-              Your global regulatory landscape,<br />personalized in five minutes. Daily.
+              Stay current on regulatory landscape in 5 minutes.
             </h1>
 
-            {/* Animated query input */}
-            <TypewriterInput />
-
-            {/* Source ticker — tight spacing below input */}
+            {/* Source ticker */}
             <SourceTicker />
 
             {/* CTAs — more breathing room below ticker */}
@@ -250,6 +275,68 @@ export default function Home() {
             </div>
           </div>
 
+        </div>
+
+        {/* ── How it works ── */}
+        <div className="home-how-it-works" style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-12) var(--space-6)", position: "relative" }}>
+          <h2 style={{
+            fontSize: "var(--text-lg)", fontWeight: 700, fontFamily: "var(--font-sans)",
+            letterSpacing: "var(--tracking-wider)", textTransform: "uppercase",
+            color: "var(--color-fg-muted)", marginBottom: "var(--space-8)", textAlign: "center",
+          }}>
+            How it works
+          </h2>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "var(--space-6)",
+          }}>
+            <HowItWorksBox
+              title="1. Set your profile"
+              desc="Tell us your therapeutic area, product codes, regions, and markets."
+              snapshot={
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {["Oncology", "510(k)", "US", "EU"].map((t) => (
+                    <span key={t} style={{
+                      padding: "4px 10px", borderRadius: "var(--radius-full)", fontSize: 11,
+                      background: "var(--color-surface-raised)", color: "var(--color-fg-muted)",
+                      border: "1px solid var(--color-border)", fontFamily: "var(--font-sans)",
+                    }}>{t}</span>
+                  ))}
+                </div>
+              }
+            />
+            <HowItWorksBox
+              title="2. We monitor 200+ sources"
+              desc="Mahogany agents scan FDA, EMA, MHRA, Health Canada, and more — globally."
+              snapshot={
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {["FDA", "EMA", "MHRA", "TGA", "WHO", "…"].map((s) => (
+                    <span key={s} style={{
+                      padding: "3px 8px", borderRadius: 4, fontSize: 10,
+                      background: "var(--color-surface-inset)", color: "var(--color-fg-placeholder)",
+                      fontFamily: "var(--font-sans)",
+                    }}>{s}</span>
+                  ))}
+                </div>
+              }
+            />
+            <HowItWorksBox
+              title="3. Get your briefing"
+              desc="Personalized feed in-app and digest emails on your schedule — daily or weekly."
+              snapshot={
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{
+                    height: 32, borderRadius: 6, background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 10, color: "var(--color-fg-muted)" }}>📧 7:00 AM</span>
+                  </div>
+                </div>
+              }
+            />
+          </div>
         </div>
 
         {/* ── Feed ── */}
@@ -444,12 +531,8 @@ export default function Home() {
             line-height: 1.2 !important;
             margin-bottom: var(--space-6) !important;
           }
-          .home-hero .home-typewriter-input {
-            padding: 12px 16px !important;
-            max-width: 100%;
-          }
-          .home-hero .home-typewriter-input span { font-size: var(--text-sm) !important; }
           .home-hero .home-source-ticker { margin-top: var(--space-2) !important; max-width: 100%; }
+          .home-how-it-works > div:last-child { grid-template-columns: 1fr !important; }
           .home-hero .home-cta-row { margin-top: var(--space-6) !important; gap: var(--space-3) !important; flex-wrap: wrap; justify-content: center; }
           .home-feed {
             padding: var(--space-8) var(--space-4) var(--space-12) !important;
@@ -457,78 +540,6 @@ export default function Home() {
           .home-feed > div:first-of-type { top: 180; }
         }
       `}</style>
-    </div>
-  );
-}
-
-/* ─── Typewriter animated input ─── */
-const QUERIES = [
-  "What did FDA Commissioner Makary say this week?",
-  "New 510(k) clearances for oncology imaging — 7 days?",
-  "Senate HELP Committee pharma hearings this week?",
-  "ICH Q13 continuous manufacturing — any new guidance?",
-  "WHO prequalification decisions in the last 7 days?",
-  "EU AI Act implications for SaMD — any updates?",
-  "CMS drug price negotiation list — any changes?",
-  "CDER director statements on biosimilar interchangeability?",
-];
-
-function TypewriterInput() {
-  const [displayText, setDisplayText] = useState("");
-  const [queryIdx, setQueryIdx] = useState(0);
-  const [charIdx, setCharIdx] = useState(0);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    const target = QUERIES[queryIdx];
-    const delay = deleting ? 18 : 42;
-    const timer = setTimeout(() => {
-      if (!deleting) {
-        if (charIdx < target.length) {
-          setDisplayText(target.slice(0, charIdx + 1));
-          setCharIdx((c) => c + 1);
-        } else {
-          setTimeout(() => setDeleting(true), 2200);
-        }
-      } else {
-        if (charIdx > 0) {
-          setDisplayText(target.slice(0, charIdx - 1));
-          setCharIdx((c) => c - 1);
-        } else {
-          setDeleting(false);
-          setQueryIdx((i) => (i + 1) % QUERIES.length);
-        }
-      }
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [charIdx, deleting, queryIdx]);
-
-  return (
-    <div className="home-typewriter-input" style={{
-      maxWidth: 720, width: "100%",
-      background: "var(--color-surface-raised)", border: "1px solid var(--color-border)",
-      borderRadius: "var(--radius-xl)", padding: "16px 24px",
-      display: "flex", alignItems: "center", gap: 12,
-      marginBottom: "var(--space-2)",
-      opacity: 0.9,
-      boxShadow: "0 2px 16px rgba(0,0,0,0.18)",
-    }}>
-      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden>
-        <circle cx="7" cy="7" r="5" stroke="var(--color-fg-muted)" strokeWidth="1.5"/>
-        <path d="M11 11l3 3" stroke="var(--color-fg-muted)" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-      <span style={{
-        fontSize: "var(--text-base)", fontFamily: "var(--font-sans)",
-        color: "var(--color-fg-muted)", flex: 1, textAlign: "left",
-        minHeight: "1.4em", whiteSpace: "nowrap", overflow: "hidden",
-      }}>
-        {displayText}<span style={{ opacity: 0.6, animation: "blink 1s step-end infinite" }}>|</span>
-      </span>
-      <span style={{
-        fontSize: "var(--text-xs)", color: "var(--color-fg-subtle)",
-        fontFamily: "var(--font-sans)", opacity: 0.5, whiteSpace: "nowrap",
-        borderLeft: "1px solid var(--color-border)", paddingLeft: 12,
-      }}>Ask Mahogany</span>
     </div>
   );
 }
