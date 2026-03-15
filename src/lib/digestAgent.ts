@@ -362,6 +362,16 @@ SUMMARY: <your 2-3 sentence summary here>`,
 
 // ─── Simple path: feed_stories → digest (same as feed, synthesized for email) ──
 
+/** Truncate to first sentence, max ~140 chars. */
+function shortSummary(text: string, maxChars = 140): string {
+  if (!text) return "";
+  if (text.length <= maxChars) return text;
+  const window = text.slice(0, maxChars + 60);
+  const dot = window.search(/\.\s/);
+  if (dot > 50 && dot <= maxChars) return window.slice(0, dot + 1);
+  return text.slice(0, maxChars).replace(/\s\S+$/, "") + "…";
+}
+
 function expandTherapeuticAreas(tas: string[]): string[] {
   const raw = tas.map((t) => t.toLowerCase().trim()).filter(Boolean);
   const out = new Set<string>(raw);
@@ -422,7 +432,7 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
      FROM feed_stories
      WHERE (profile_id = $1 OR is_global = true)${domainCondition}${regionCondition}${taCondition}
      ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
-     LIMIT 35`,
+     LIMIT 15`,
     params
   );
 
@@ -430,14 +440,18 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
   const filtered = stories.filter((s) => !isBlockedSource(s));
   if (filtered.length === 0) return null;
 
+  // Cap at 12 stories, max 4 sections, max 3 per section
   const sections = new Map<string, typeof stories>();
   for (const s of filtered) {
     const sec = s.section || "Regulatory Updates";
+    if (sections.size >= 4 && !sections.has(sec)) continue;
     if (!sections.has(sec)) sections.set(sec, []);
-    sections.get(sec)!.push(s);
+    const bucket = sections.get(sec)!;
+    if (bucket.length >= 3) continue;
+    bucket.push(s);
   }
   const sectionNames = Array.from(sections.keys());
-  const headlines = filtered.slice(0, 10).map((s) => s.headline);
+  const headlines = filtered.slice(0, 6).map((s) => s.headline);
 
   const { title, summary } = await generateDigestHeader(
     sectionNames,
@@ -446,26 +460,22 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
     profile.therapeutic_areas
   );
 
-  const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
+  const severityEmoji: Record<string, string> = { high: "🔴", medium: "🟡", low: "🟢" };
   const parts: string[] = [];
   for (const [section, items] of sections) {
     const sev = items[0]?.severity || "medium";
     const sectionTitle = section.toUpperCase().replace(/\s+/g, " ");
-    parts.push(`\n${sectionTitle} — ${severityEmoji[sev.toLowerCase()] || "🟡 MEDIUM"}\n\n`);
+    parts.push(`\n${sectionTitle} — ${severityEmoji[sev.toLowerCase()] || "🟡"}\n\n`);
     for (const item of items) {
-      const itemSummary = item.summary || item.body?.slice(0, 400) || "";
-      const why = item.relevance_reason ? `\n\nWhy this surfaced: ${item.relevance_reason}` : "";
+      const blurb = shortSummary(item.summary || item.body || "");
+      const why = item.relevance_reason ? `\n\nWhy this matters: ${item.relevance_reason}` : "";
       const label = item.source_labels?.[0] || "Source";
-      const dateStr = item.published_at
-        ? (typeof item.published_at === "string" ? item.published_at.slice(0, 10) : new Date(item.published_at).toISOString().slice(0, 10))
-        : new Date().toISOString().slice(0, 10);
-      const storyLink = `[View in feed](${baseUrl}/stories/${item.id})`;
       const sourceLink = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
         ? `[${label}](${item.source_urls[0]})`
         : "";
-      const linksPart = [storyLink, sourceLink].filter(Boolean).join(" · ");
-      const sourceLine = linksPart ? `\n\n${dateStr} · ${linksPart}` : "";
-      parts.push(`**[${item.headline}](${baseUrl}/stories/${item.id})**\n\n${itemSummary}${why}${sourceLine}\n\n`);
+      const readMore = `[Read full story →](${baseUrl}/stories/${item.id})`;
+      const linksPart = [readMore, sourceLink].filter(Boolean).join(" · ");
+      parts.push(`**[${item.headline}](${baseUrl}/stories/${item.id})**\n\n${blurb}${why}\n\n${linksPart}\n\n`);
     }
   }
 
@@ -889,7 +899,7 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
      FROM feed_stories
      WHERE (profile_id = $1 OR is_global = true)${domainCondition}${regionCondition}${taCondition}
      ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
-     LIMIT 35`,
+     LIMIT 15`,
     fallbackParams
   );
 
@@ -897,14 +907,18 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
   const storiesToUse = stories.filter((s) => !isBlockedSource(s));
 
   if (storiesToUse.length > 0) {
+    // Cap at 12 stories, max 4 sections, max 3 per section
     const sections = new Map<string, typeof storiesToUse>();
     for (const s of storiesToUse) {
       const sec = s.section || "Regulatory Updates";
+      if (sections.size >= 4 && !sections.has(sec)) continue;
       if (!sections.has(sec)) sections.set(sec, []);
-      sections.get(sec)!.push(s);
+      const bucket = sections.get(sec)!;
+      if (bucket.length >= 3) continue;
+      bucket.push(s);
     }
     const sectionNames = Array.from(sections.keys());
-    const headlines = storiesToUse.slice(0, 10).map((s) => s.headline);
+    const headlines = storiesToUse.slice(0, 6).map((s) => s.headline);
     const { title, summary } = await generateDigestHeader(
       sectionNames,
       headlines,
@@ -912,26 +926,22 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
       profile.therapeutic_areas
     );
 
-    const severityEmoji: Record<string, string> = { high: "🔴 HIGH", medium: "🟡 MEDIUM", low: "🟢 LOW" };
+    const severityEmoji: Record<string, string> = { high: "🔴", medium: "🟡", low: "🟢" };
     const parts: string[] = [];
     for (const [section, items] of sections) {
       const sev = items[0]?.severity || "medium";
       const sectionTitle = section.toUpperCase().replace(/\s+/g, " ");
-      parts.push(`\n${sectionTitle} — ${severityEmoji[sev.toLowerCase()] || "🟡 MEDIUM"}\n\n`);
+      parts.push(`\n${sectionTitle} — ${severityEmoji[sev.toLowerCase()] || "🟡"}\n\n`);
       for (const item of items) {
-        const itemSummary = item.summary || item.body?.slice(0, 400) || "";
-        const why = item.relevance_reason ? `\n\nWhy this surfaced: ${item.relevance_reason}` : "";
+        const blurb = shortSummary(item.summary || item.body || "");
+        const why = item.relevance_reason ? `\n\nWhy this matters: ${item.relevance_reason}` : "";
         const label = item.source_labels?.[0] || "Source";
-        const dateStr = item.published_at
-          ? (typeof item.published_at === "string" ? item.published_at.slice(0, 10) : new Date(item.published_at).toISOString().slice(0, 10))
-          : new Date().toISOString().slice(0, 10);
-        const storyLink = `[View in feed](${baseUrl}/stories/${item.id})`;
         const sourceLink = item.source_urls?.[0] && isValidSourceUrl(item.source_urls[0])
           ? `[${label}](${item.source_urls[0]})`
           : "";
-        const linksPart = [storyLink, sourceLink].filter(Boolean).join(" · ");
-        const sourceLine = linksPart ? `\n\n${dateStr} · ${linksPart}` : "";
-        parts.push(`**[${item.headline}](${baseUrl}/stories/${item.id})**\n\n${itemSummary}${why}${sourceLine}\n\n`);
+        const readMore = `[Read full story →](${baseUrl}/stories/${item.id})`;
+        const linksPart = [readMore, sourceLink].filter(Boolean).join(" · ");
+        parts.push(`**[${item.headline}](${baseUrl}/stories/${item.id})**\n\n${blurb}${why}\n\n${linksPart}\n\n`);
       }
     }
     const body = parts.join("");

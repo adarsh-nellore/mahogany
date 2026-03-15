@@ -77,7 +77,7 @@ export function renderDigestEmail(markdown: string): string {
 
     if (trimmed.startsWith("**")) {
       htmlParts.push(
-        `<p style="${font(16)}font-weight:600;color:#111827;margin:28px 0 10px 0;line-height:1.6;">${formatInline(trimmed)}</p>`
+        `<p style="${font(16)}font-weight:600;color:#111827;margin:20px 0 6px 0;line-height:1.5;">${formatInline(trimmed)}</p>`
       );
       i++;
       continue;
@@ -94,7 +94,7 @@ export function renderDigestEmail(markdown: string): string {
 
     if (isSourceLine(trimmed)) {
       htmlParts.push(
-        `<p style="${font(12)}color:#9ca3af;margin:4px 0 32px 0;line-height:1.5;">${formatSourceLine(trimmed)}</p>`
+        `<p style="${font(12)}color:#9ca3af;margin:4px 0 16px 0;line-height:1.5;padding-bottom:16px;border-bottom:1px solid #f3f4f6;">${formatSourceLine(trimmed)}</p>`
       );
       i++;
       continue;
