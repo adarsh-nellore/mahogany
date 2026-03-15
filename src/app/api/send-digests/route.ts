@@ -59,7 +59,7 @@ function isDigestDayForCadence(localDayOfWeek: number, cadence: string): boolean
   return true;
 }
 
-export const maxDuration = 600; // 10 min — digest sends can take 4+ min with LLM header per profile
+export const maxDuration = 60; // Vercel hobby: 60s max; ~5-10s per 3 profiles is well within limit
 
 async function sendDigests(force = false): Promise<DigestSendSummary> {
   const summary: DigestSendSummary = {

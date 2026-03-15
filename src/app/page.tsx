@@ -76,32 +76,193 @@ function groupBySection(stories: FeedStory[]): { section: string; stories: FeedS
   return ordered;
 }
 
-const SCROLL_THRESHOLD_PX = 900; // desktop: ~1 viewport
-const MOBILE_SCROLL_MULTIPLIER = 1.6; // mobile: gate at mid-page (~1.6 viewports)
+// Gate triggers ~5 stories into the feed (hero + how-it-works + ~2 feed screens)
+const SCROLL_THRESHOLD_MULTIPLIER = 4.5; // desktop: ~4.5 viewports down
+const MOBILE_SCROLL_MULTIPLIER = 5.0; // mobile: slightly more
 
-function HowItWorksBox({ title, desc, snapshot }: { title: string; desc: string; snapshot: React.ReactNode }) {
+function FadeInRow({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold: 0.12 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
   return (
-    <div style={{
-      background: "var(--color-surface)",
-      border: "1px solid var(--color-border)",
-      borderRadius: "var(--radius-lg)",
-      padding: "var(--space-5)",
-      display: "flex",
-      flexDirection: "column",
-      gap: "var(--space-4)",
+    <div ref={ref} style={{
+      opacity: visible ? 1 : 0,
+      transform: visible ? "translateY(0)" : "translateY(24px)",
+      transition: "opacity 0.6s ease, transform 0.6s ease",
     }}>
-      <div>
-        <div style={{ fontSize: "var(--text-md)", fontWeight: 600, color: "var(--color-fg)", fontFamily: "var(--font-sans)", marginBottom: 4 }}>{title}</div>
-        <div style={{ fontSize: "var(--text-sm)", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", lineHeight: "var(--leading-relaxed)" }}>{desc}</div>
+      {children}
+    </div>
+  );
+}
+
+const HOW_IT_WORKS_STEPS = [
+  {
+    tab: "Set your profile",
+    title: "Tell us what you track.",
+    desc: "Set your therapeutic areas, submission types, and markets once. Agents use your profile to filter every signal — nothing irrelevant, nothing missed.",
+    ui: (
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginBottom: 12 }}>Therapeutic Areas</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {[["Oncology", true], ["Cardiovascular", true], ["Immunology", false], ["Neurology", false], ["Medical Devices", false]].map(([t, on]) => (
+              <span key={t as string} style={{
+                padding: "8px 20px", borderRadius: 99,
+                fontSize: 15, fontFamily: "var(--font-sans)", fontWeight: 500,
+                background: on ? "var(--color-primary-solid)" : "transparent",
+                color: on ? "#fff" : "var(--color-fg-muted)",
+                border: `1.5px solid ${on ? "transparent" : "var(--color-border)"}`,
+                opacity: on ? 1 : 0.4,
+              }}>{t as string}</span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", marginBottom: 12 }}>Submission Types</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {[["510(k)", true], ["PMA", true], ["De Novo", false], ["BLA/NDA", false], ["IVD", false]].map(([t, on]) => (
+              <span key={t as string} style={{
+                padding: "8px 20px", borderRadius: 99,
+                fontSize: 15, fontFamily: "var(--font-sans)", fontWeight: 500,
+                background: on ? "var(--color-primary-solid)" : "transparent",
+                color: on ? "#fff" : "var(--color-fg-muted)",
+                border: `1.5px solid ${on ? "transparent" : "var(--color-border)"}`,
+                opacity: on ? 1 : 0.4,
+              }}>{t as string}</span>
+            ))}
+          </div>
+        </div>
       </div>
-      <div style={{
-        minHeight: 56,
-        padding: "var(--space-3)",
-        background: "var(--color-surface-inset)",
-        borderRadius: "var(--radius-md)",
-        border: "1px solid var(--color-border)",
-      }}>
-        {snapshot}
+    ),
+  },
+  {
+    tab: "200+ sources monitored",
+    title: "Agents scan 200+ sources, every hour.",
+    desc: "Crawling agents monitor every major regulatory body and industry publication — FDA, EMA, MHRA, TGA, WHO, and 195 more — continuously, without gaps.",
+    ui: (
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 14, borderBottom: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, boxShadow: "0 0 0 3px #22c55e28" }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.08em" }}>All agents active</span>
+          </div>
+          <span style={{ fontSize: 13, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>Last scan: 2 min ago</span>
+        </div>
+        {[
+          { label: "Regulatory Bodies", sources: ["FDA MedWatch", "EMA CHMP", "MHRA", "TGA Australia"] },
+          { label: "Global Agencies", sources: ["Health Canada", "WHO", "PMDA Japan", "ANVISA"] },
+          { label: "Official Registers", sources: ["Federal Register", "ClinicalTrials.gov", "DailyMed", "+ 188 more"] },
+        ].map(({ label, sources }) => (
+          <div key={label} style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.07em", flexShrink: 0, width: 140 }}>{label}</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px" }}>
+              {sources.map(s => (
+                <span key={s} style={{ fontSize: 15, fontFamily: "var(--font-sans)", color: s.startsWith("+") ? "var(--color-fg-muted)" : "var(--color-fg)", opacity: s.startsWith("+") ? 0.4 : 0.85 }}>{s}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    tab: "Live feed & digests",
+    title: "Signals surface the moment they break.",
+    desc: "Agent-classified stories hit your feed in real time, tagged by source, severity, and portfolio relevance. Get a digest daily, weekly, or on-demand.",
+    ui: (
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 12, marginBottom: 2, borderBottom: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, boxShadow: "0 0 0 3px #22c55e28" }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Live Feed</span>
+          </div>
+          <span style={{ fontSize: 13, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>Updates every 5 min · 200+ sources</span>
+        </div>
+        {[
+          { severity: "HIGH", color: "#e05c2a", headline: "FDA Updates Quality System Regulation — Alignment with ISO 13485:2016", source: "FDA Federal Register", time: "2m ago" },
+          { severity: "MEDIUM", color: "#f0a83a", headline: "EMA Finalizes Guideline on Real-World Evidence for Post-Authorization Studies", source: "EMA CHMP", time: "38m ago" },
+          { severity: "LOW", color: "#60a5fa", headline: "MHRA Issues Draft Guidance on Software as a Medical Device Classification", source: "MHRA", time: "1h ago", dim: true },
+        ].map((entry, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 0", borderBottom: i < 2 ? "1px solid var(--color-border)" : "none", opacity: (entry as { dim?: boolean }).dim ? 0.35 : 1 }}>
+            <div style={{ width: 3, borderRadius: 99, background: entry.color, flexShrink: 0, alignSelf: "stretch", minHeight: 36 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: entry.color, fontFamily: "var(--font-sans)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{entry.source}</span>
+                <span style={{ fontSize: 12, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)" }}>· {entry.time}</span>
+              </div>
+              <span style={{ fontSize: 15, fontWeight: 600, fontFamily: "var(--font-sans)", color: "var(--color-fg)", lineHeight: 1.4, display: "block" }}>{entry.headline}</span>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: `${entry.color}22`, color: entry.color, fontFamily: "var(--font-sans)", flexShrink: 0, whiteSpace: "nowrap", marginTop: 2 }}>{entry.severity}</span>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+];
+
+function HowItWorksSection() {
+  const [active, setActive] = useState(0);
+  const step = HOW_IT_WORKS_STEPS[active];
+  return (
+    <div>
+      {/* Tab bar */}
+      <div style={{ display: "flex", borderBottom: "1px solid var(--color-border)", marginBottom: 52 }}>
+        {HOW_IT_WORKS_STEPS.map((s, i) => (
+          <button
+            key={i}
+            onClick={() => setActive(i)}
+            style={{
+              padding: "12px 28px",
+              background: "none", border: "none", cursor: "pointer",
+              borderBottom: `2px solid ${active === i ? "var(--color-primary)" : "transparent"}`,
+              marginBottom: -1,
+              color: active === i ? "var(--color-fg)" : "var(--color-fg-muted)",
+              fontWeight: active === i ? 600 : 400,
+              fontFamily: "var(--font-sans)",
+              fontSize: 15,
+              transition: "color 0.15s ease, border-color 0.15s ease",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {s.tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Content: card left, text right */}
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 72, alignItems: "center" }}>
+        {/* Left: glass card */}
+        <div style={{
+          background: "var(--glass-bg)",
+          backdropFilter: "blur(var(--glass-blur))",
+          WebkitBackdropFilter: "blur(var(--glass-blur))",
+          border: "1px solid rgba(255,255,255,0.09)",
+          borderRadius: "var(--radius-xl)",
+          padding: "32px 36px",
+        }}>
+          {step.ui}
+        </div>
+        {/* Right: text */}
+        <div>
+          <h3 style={{
+            fontSize: "clamp(1.6rem, 2.4vw, 2.2rem)",
+            fontWeight: 700, fontFamily: "var(--font-heading)",
+            color: "var(--color-fg)", lineHeight: 1.2, margin: "0 0 16px",
+          }}>{step.title}</h3>
+          <p style={{
+            fontSize: 17, color: "var(--color-fg-muted)",
+            fontFamily: "var(--font-sans)", lineHeight: 1.7, margin: 0,
+          }}>{step.desc}</p>
+        </div>
       </div>
     </div>
   );
@@ -170,8 +331,8 @@ export default function Home() {
       const { scrollTop } = el;
       const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
       const threshold = typeof window !== "undefined"
-        ? (isMobile ? window.innerHeight * MOBILE_SCROLL_MULTIPLIER : Math.min(window.innerHeight, SCROLL_THRESHOLD_PX))
-        : SCROLL_THRESHOLD_PX;
+        ? window.innerHeight * (isMobile ? MOBILE_SCROLL_MULTIPLIER : SCROLL_THRESHOLD_MULTIPLIER)
+        : 3600;
       if (scrollTop >= threshold) {
         if (!dismissedByUserRef.current) setShowGate(true);
       } else {
@@ -191,6 +352,7 @@ export default function Home() {
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
+
 
   const sections = groupBySection(stories);
 
@@ -252,7 +414,7 @@ export default function Home() {
               margin: "0 0 var(--space-10)",
               maxWidth: "88vw",
             }}>
-              Stay current on regulatory landscape in 5 minutes.
+              Know every regulatory move that affects your portfolio.
             </h1>
 
             {/* Source ticker */}
@@ -278,65 +440,24 @@ export default function Home() {
         </div>
 
         {/* ── How it works ── */}
-        <div className="home-how-it-works" style={{ maxWidth: 960, margin: "0 auto", padding: "var(--space-12) var(--space-6)", position: "relative" }}>
-          <h2 style={{
-            fontSize: "var(--text-lg)", fontWeight: 700, fontFamily: "var(--font-sans)",
-            letterSpacing: "var(--tracking-wider)", textTransform: "uppercase",
-            color: "var(--color-fg-muted)", marginBottom: "var(--space-8)", textAlign: "center",
-          }}>
-            How it works
-          </h2>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: "var(--space-6)",
-          }}>
-            <HowItWorksBox
-              title="1. Set your profile"
-              desc="Tell us your therapeutic area, product codes, regions, and markets."
-              snapshot={
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {["Oncology", "510(k)", "US", "EU"].map((t) => (
-                    <span key={t} style={{
-                      padding: "4px 10px", borderRadius: "var(--radius-full)", fontSize: 11,
-                      background: "var(--color-surface-raised)", color: "var(--color-fg-muted)",
-                      border: "1px solid var(--color-border)", fontFamily: "var(--font-sans)",
-                    }}>{t}</span>
-                  ))}
-                </div>
-              }
-            />
-            <HowItWorksBox
-              title="2. We monitor 200+ sources"
-              desc="Mahogany agents scan FDA, EMA, MHRA, Health Canada, and more — globally."
-              snapshot={
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                  {["FDA", "EMA", "MHRA", "TGA", "WHO", "…"].map((s) => (
-                    <span key={s} style={{
-                      padding: "3px 8px", borderRadius: 4, fontSize: 10,
-                      background: "var(--color-surface-inset)", color: "var(--color-fg-placeholder)",
-                      fontFamily: "var(--font-sans)",
-                    }}>{s}</span>
-                  ))}
-                </div>
-              }
-            />
-            <HowItWorksBox
-              title="3. Get your briefing"
-              desc="Personalized feed in-app and digest emails on your schedule — daily or weekly."
-              snapshot={
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{
-                    height: 32, borderRadius: 6, background: "var(--color-surface-raised)",
-                    border: "1px solid var(--color-border)",
-                  }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 10, color: "var(--color-fg-muted)" }}>📧 7:00 AM</span>
-                  </div>
-                </div>
-              }
-            />
-          </div>
+        <div className="home-how-it-works" style={{ padding: "80px var(--space-8) 0", maxWidth: 1100, margin: "0 auto" }}>
+
+          {/* Section header */}
+          <FadeInRow>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--color-primary)", fontFamily: "var(--font-sans)", marginBottom: 14 }}>How it Works</div>
+              <h2 style={{ fontSize: "clamp(1.6rem, 2.8vw, 2.4rem)", fontWeight: 700, fontFamily: "var(--font-heading)", color: "var(--color-fg)", lineHeight: 1.2, margin: "0 0 14px" }}>
+                Autonomous agents. Continuous coverage.
+              </h2>
+              <p style={{ fontSize: 17, color: "var(--color-fg-muted)", fontFamily: "var(--font-sans)", lineHeight: "var(--leading-relaxed)", maxWidth: 500, margin: "0 auto" }}>
+                Specialized AI agents ingest 200+ regulatory sources around the clock — surfacing only what&apos;s relevant to your portfolio.
+              </p>
+            </div>
+          </FadeInRow>
+
+          <FadeInRow>
+            <HowItWorksSection />
+          </FadeInRow>
         </div>
 
         {/* ── Feed ── */}
@@ -532,7 +653,8 @@ export default function Home() {
             margin-bottom: var(--space-6) !important;
           }
           .home-hero .home-source-ticker { margin-top: var(--space-2) !important; max-width: 100%; }
-          .home-how-it-works > div:last-child { grid-template-columns: 1fr !important; }
+          .home-how-it-works { padding: 64px var(--space-4) 72px !important; }
+          .home-how-it-works .hiw-row { grid-template-columns: 1fr !important; gap: var(--space-6) !important; padding: 48px 0 !important; }
           .home-hero .home-cta-row { margin-top: var(--space-6) !important; gap: var(--space-3) !important; flex-wrap: wrap; justify-content: center; }
           .home-feed {
             padding: var(--space-8) var(--space-4) var(--space-12) !important;

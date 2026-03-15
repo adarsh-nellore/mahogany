@@ -899,11 +899,9 @@ export default function FeedPage() {
 
         {/* ── STORY FEED grouped by AI category ── */}
         {!loading && displayStories.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-20)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-12)" }}>
             {groupBySection(displayStories).map(({ section, stories: sectionStories }) => {
               const lead = sectionStories[0];
-              const featured = sectionStories.slice(1, 3);
-              const rest = sectionStories.slice(3);
               return (
                 <div key={section} id={slugify(section)} data-section={section}>
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-8)" }}>
@@ -919,69 +917,42 @@ export default function FeedPage() {
                       {sectionStories.length}
                     </span>
                   </div>
-                  <div className="news-section-articles" style={{ display: "flex", flexDirection: "column", gap: "var(--space-10)" }}>
+                  <div className="news-section-articles" style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
                     {lead && (
                       <Link href={`/stories/${lead.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(lead.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
-                          <StoryImage story={lead} size="lead" />
-                          <div style={{ padding: "var(--space-7)" }}>
-                            <div className="news-card-meta">
-                              <span style={{ color: sectionColor(lead.section), fontWeight: 600, textTransform: "uppercase" }}>{lead.section}</span>
+                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(lead.severity), cursor: "pointer", padding: "var(--space-6)", borderBottom: "1px solid var(--color-border)" } as React.CSSProperties}>
+                          <h2 className="news-card-title" style={{ fontSize: "var(--text-lg)", marginBottom: "var(--space-2)", lineHeight: 1.25 }}>
+                            {lead.headline}
+                          </h2>
+                          <p className="news-card-summary" style={{ marginBottom: "var(--space-3)", fontSize: "var(--text-base)" }}>{truncate(lead.summary, 200)}</p>
+                          <ProfileMatchTags story={lead} profile={profile} extraProducts={watchedProducts} />
+                          <RelevanceReason reason={lead.relevance_reason} />
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-2)" }}>
+                            <div className="news-card-meta" style={{ margin: 0 }}>
                               <FreshnessBadge createdAt={lead.created_at} publishedAt={lead.published_at} />
                               <span className={`badge ${lead.severity === "high" ? "badge-danger" : lead.severity === "medium" ? "badge-warning" : "badge-info"}`} style={{ fontSize: "var(--text-2xs)" }}>{lead.severity}</span>
-                            </div>
-                            <h2 className="news-card-title" style={{ fontSize: "var(--text-lg)", marginBottom: "var(--space-3)", lineHeight: 1.25 }}>
-                              {lead.headline}
-                            </h2>
-                            <p className="news-card-summary" style={{ marginBottom: "var(--space-4)", fontSize: "var(--text-base)" }}>{lead.summary}</p>
-                            <ProfileMatchTags story={lead} profile={profile} extraProducts={watchedProducts} />
-                            <RelevanceReason reason={lead.relevance_reason} />
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "var(--space-3)" }}>
-                              <SourceBlock labels={lead.source_labels} urls={lead.source_urls} max={2} />
                               <TrustIndicator sourceCount={lead.source_urls.length} severity={lead.severity} />
                             </div>
+                            <FeedbackButtons storyId={lead.id} />
                           </div>
                         </article>
                       </Link>
                     )}
-                    {featured.map((s) => (
+                    {sectionStories.slice(1).map((s) => (
                       <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "column", cursor: "pointer", padding: 0, overflow: "hidden" } as React.CSSProperties}>
-                          <StoryImage story={s} size="medium" />
-                          <div style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column" }}>
-                            <div className="news-card-meta">
-                              <span style={{ color: sectionColor(s.section), fontWeight: 600, textTransform: "uppercase" }}>{s.section}</span>
+                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(s.severity), cursor: "pointer", padding: "var(--space-5) var(--space-6)", borderBottom: "1px solid var(--color-border)" } as React.CSSProperties}>
+                          <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: "var(--space-1)" }}>
+                            {s.headline}
+                          </h3>
+                          <p className="news-card-summary" style={{ fontSize: "var(--text-sm)", marginBottom: "var(--space-2)" }}>{truncate(s.summary || s.body, 120)}</p>
+                          <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-1)" }}>
+                            <div className="news-card-meta" style={{ margin: 0 }}>
                               <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
+                              <span className={`badge ${s.severity === "high" ? "badge-danger" : s.severity === "medium" ? "badge-warning" : "badge-info"}`} style={{ fontSize: "var(--text-2xs)" }}>{s.severity}</span>
+                              <TrustIndicator sourceCount={s.source_urls.length} severity={s.severity} />
                             </div>
-                            <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: "var(--space-2)" }}>
-                              {s.headline}
-                            </h3>
-                            <p className="news-card-summary">{truncate(s.summary, 160)}</p>
-                            <ProfileMatchTags story={s} profile={profile} extraProducts={watchedProducts} />
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "var(--space-2)" }}>
-                              <SourceBlock labels={s.source_labels} urls={s.source_urls} max={2} />
-                              <FeedbackButtons storyId={s.id} />
-                            </div>
-                          </div>
-                        </article>
-                      </Link>
-                    ))}
-                    {rest.map((s) => (
-                      <Link key={s.id} href={`/stories/${s.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                        <article className="news-card card-interactive feed-article" style={{ "--news-card-accent": severityAccentColor(s.severity), display: "flex", flexDirection: "row", cursor: "pointer", padding: "var(--space-6)", gap: "var(--space-4)", alignItems: "center" } as React.CSSProperties}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div className="news-card-meta" style={{ marginBottom: 4 }}>
-                              <span style={{ color: sectionColor(s.section), fontWeight: 600, textTransform: "uppercase", fontSize: "var(--text-2xs)" }}>{s.section}</span>
-                              <FreshnessBadge createdAt={s.created_at} publishedAt={s.published_at} />
-                            </div>
-                            <h3 className="news-card-title" style={{ fontSize: "var(--text-md)", marginBottom: 4 }}>
-                              {s.headline}
-                            </h3>
-                            <p className="news-card-summary" style={{ fontSize: "var(--text-xs)", marginBottom: 0 }}>{truncate(s.summary || s.body, 100)}</p>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: "var(--space-2)" }}>
-                              <SourceBlock labels={s.source_labels} urls={s.source_urls} max={1} />
-                              <FeedbackButtons storyId={s.id} />
-                            </div>
+                            <FeedbackButtons storyId={s.id} />
                           </div>
                         </article>
                       </Link>
