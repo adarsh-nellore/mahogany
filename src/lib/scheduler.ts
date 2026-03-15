@@ -1,7 +1,9 @@
 import cron from 'node-cron';
 
 function buildBaseUrl() {
-  return `http://localhost:${process.env.PORT || 3000}`;
+  return process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : `http://localhost:${process.env.PORT || 3000}`;
 }
 
 function buildHeaders(): Record<string, string> {
