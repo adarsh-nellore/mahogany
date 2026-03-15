@@ -377,12 +377,33 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
     ? expandTherapeuticAreas(profile.therapeutic_areas)
     : null;
 
+  const params: unknown[] = [profile.id];
+  let paramIdx = 1;
+
+  // Domain filter: for global stories, require at least one domain overlap
+  let domainCondition = "";
+  if (profile.domains?.length) {
+    paramIdx++;
+    params.push(profile.domains);
+    domainCondition = ` AND (profile_id = $1 OR domains = '{}' OR domains && $${paramIdx}::text[])`;
+  }
+
+  // Region filter: for global stories, require region overlap (unless profile includes "Global")
+  let regionCondition = "";
+  if (profile.regions?.length && !profile.regions.includes("Global")) {
+    paramIdx++;
+    params.push(profile.regions);
+    regionCondition = ` AND (profile_id = $1 OR regions = '{}' OR regions && $${paramIdx}::text[])`;
+  }
+
   // When user has selected TAs: require overlap (case-insensitive). Exclude untagged stories — they can be off-topic (e.g. oncology).
-  const taCondition =
-    taExpanded?.length
-      ? ` AND cardinality(therapeutic_areas) > 0 AND EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($2::text[]))`
-      : "";
-  const taParam = taExpanded;
+  let taCondition = "";
+  if (taExpanded?.length) {
+    paramIdx++;
+    params.push(taExpanded);
+    taCondition = ` AND cardinality(therapeutic_areas) > 0 AND EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($${paramIdx}::text[]))`;
+  }
+
   const baseUrl = getAppBaseUrl();
 
   const stories = await query<{
@@ -399,10 +420,10 @@ async function buildDigestFromFeedStories(profile: Profile): Promise<string | nu
   }>(
     `SELECT id, section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
      FROM feed_stories
-     WHERE (profile_id = $1 OR is_global = true)${taCondition}
+     WHERE (profile_id = $1 OR is_global = true)${domainCondition}${regionCondition}${taCondition}
      ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
      LIMIT 35`,
-    taParam ? [profile.id, taParam] : [profile.id]
+    params
   );
 
   // Exclude blocked sources (NYT, AHA, etc.) — same filter as news feed
@@ -820,16 +841,36 @@ function fmtEvidenceDate(iso: string): string {
  * Falls back to raw signals only when no curated stories exist.
  */
 async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<string> {
-  // Prefer feed_stories (curated) over raw signal dump; filter by therapeutic areas when set
+  // Prefer feed_stories (curated) over raw signal dump; filter by preferences when set
   const taExpanded = profile.therapeutic_areas?.length
     ? expandTherapeuticAreas(profile.therapeutic_areas)
     : null;
+
+  const fallbackParams: unknown[] = [profile.id];
+  let paramIdx = 1;
+
+  let domainCondition = "";
+  if (profile.domains?.length) {
+    paramIdx++;
+    fallbackParams.push(profile.domains);
+    domainCondition = ` AND (profile_id = $1 OR domains = '{}' OR domains && $${paramIdx}::text[])`;
+  }
+
+  let regionCondition = "";
+  if (profile.regions?.length && !profile.regions.includes("Global")) {
+    paramIdx++;
+    fallbackParams.push(profile.regions);
+    regionCondition = ` AND (profile_id = $1 OR regions = '{}' OR regions && $${paramIdx}::text[])`;
+  }
+
   // When user has selected TAs: require overlap (case-insensitive). Exclude untagged stories.
-  const taCondition =
-    taExpanded?.length
-      ? ` AND cardinality(therapeutic_areas) > 0 AND EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($2::text[]))`
-      : "";
-  const fallbackParams = taExpanded ? [profile.id, taExpanded] : [profile.id];
+  let taCondition = "";
+  if (taExpanded?.length) {
+    paramIdx++;
+    fallbackParams.push(taExpanded);
+    taCondition = ` AND cardinality(therapeutic_areas) > 0 AND EXISTS (SELECT 1 FROM unnest(therapeutic_areas) t WHERE lower(trim(t::text)) = ANY($${paramIdx}::text[]))`;
+  }
+
   const baseUrl = getAppBaseUrl();
 
   const stories = await query<{
@@ -846,7 +887,7 @@ async function fallbackDigest(profile: Profile, signals: Signal[]): Promise<stri
   }>(
     `SELECT id, section, severity, headline, summary, body, source_urls, source_labels, published_at, relevance_reason
      FROM feed_stories
-     WHERE (profile_id = $1 OR is_global = true)${taCondition}
+     WHERE (profile_id = $1 OR is_global = true)${domainCondition}${regionCondition}${taCondition}
      ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, published_at DESC
      LIMIT 35`,
     fallbackParams
