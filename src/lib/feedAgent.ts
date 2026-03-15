@@ -393,14 +393,12 @@ THEMATIC SECTIONS — generate your OWN section names that best fit the stories:
 STORY FORMAT — each story in the JSON array must have:
 - "headline": Specific and analytical. Name companies, products, regulation numbers, therapeutic areas. Bloomberg/Reuters style. NOT generic like "FDA Issues New Guidance" — instead "FDA Finalizes AI/ML-Based SaMD Framework, Mandating Real-World Performance Monitoring for Class II Devices."
 - "summary": 3-4 sentence executive summary. Lead with the "so what" — why should a busy VP of Regulatory Affairs care about this right now? What action might they need to take?
-- "body": A COMPREHENSIVE article. 800-1500 words. 5-10 analytical paragraphs in markdown. This is a full article, not a blurb. Structure:
+- "body": A focused article. 250-400 words. 3-5 analytical paragraphs in markdown. Structure:
   * **Lead paragraph**: What happened, who is affected, and why it matters NOW.
-  * **Background/context**: Regulatory history, prior actions, how this fits the broader trend.
-  * **Details**: Specific documents, docket numbers, effective dates, product names, companies. Quote key language from source documents when you fetched them.
-  * **Multi-jurisdictional context** (when applicable): How does this compare to actions by other regulators? Is there convergence or divergence?
-  * **Industry impact analysis**: Which companies are affected? What are the competitive implications? What does this mean for products in development?
-  * **What to watch / action items**: Concrete next steps for RA/QA professionals. Comment deadlines, implementation timelines, recommended actions.
-  * Use **bold** for key terms, company names, and regulation numbers. Use [inline links](url) to source documents extensively.
+  * **Details**: Specific documents, docket numbers, effective dates, product names, companies.
+  * **Industry impact**: Which companies/products are affected and what action may be needed.
+  * **What to watch**: 1-2 concrete next steps or deadlines for RA/QA professionals.
+  * Use **bold** for key terms and regulation numbers. Use [inline links](url) to source documents.
 - "section": Your chosen thematic section name. REQUIRED. Must be specific and descriptive (see section rules above).
 - "severity": "high" (guidance changes—draft or final—final rules, major safety alerts, recalls, product withdrawals, significant approvals), "medium" (consultations, routine approvals, meeting highlights), "low" (news, analysis, workshops). Guidance changes have the highest regulatory implications — always "high".
 - "domains": array of "devices" and/or "pharma"
@@ -416,7 +414,7 @@ CRITICAL RULES:
 - Generate 25-40 stories. Cover the most important signals. MUST cover at least 5 different sections.
 - EVERY SIGNAL MUST BE COVERED. If you cannot group a signal with others, write it as a standalone story. No signal should be left uncovered.
 - GROUPING WHEN POSSIBLE: Group related signals (same company, same product class, same therapeutic area, same regulatory pathway) into richer multi-source stories. But never skip a signal just because it doesn't fit a group.
-- STORY DEPTH: For grouped stories, aim for 500-800 words. For standalone signals, 200-400 words is acceptable. Quality matters more than minimum word counts.
+- STORY DEPTH: Aim for 250-400 words per story. Quality over length — be specific and analytical, not verbose.
 - REGIONAL BALANCE: If there are EU/UK/Global signals, produce dedicated stories. The "EU & International" section should have 3-6 stories whenever non-US signals exist. Do NOT make this a US-only feed.
 - INTERNATIONAL MINIMUM: At least 30% of stories must cover non-US regions. If you have EU/UK/Canada/Japan/Australia signals, produce at least 8 dedicated international stories. This is non-negotiable.
 - THERAPEUTIC AREA COVERAGE: If signals span multiple therapeutic areas (oncology, cardiology, neurology, etc.), ensure stories are distributed across them. The reader should see coverage relevant to their tracked areas.
