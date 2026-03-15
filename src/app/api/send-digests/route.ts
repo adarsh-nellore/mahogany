@@ -44,11 +44,7 @@ function getLocalDayOfWeek(timezone: string): number {
 }
 
 function isInDigestHourWindow(localHour: number, digestSendHour: number): boolean {
-  const target = digestSendHour ?? 7;
-  const lo = (target - 1 + 24) % 24;
-  const hi = (target + 1) % 24;
-  if (lo <= hi) return localHour >= lo && localHour <= hi;
-  return localHour >= lo || localHour <= hi;
+  return localHour === (digestSendHour ?? 7);
 }
 
 /** twice_weekly = Tue (2) & Fri (5); weekly = Mon (1). */
